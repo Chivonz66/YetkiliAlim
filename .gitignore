@@ -1,0 +1,29 @@
+# Swarm worktrees
+.swarm/
+
+# Dependencies
+node_modules/
+.opencode/node_modules/
+bun.lock
+bun.lockb
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Build output
+build/
+dist/
+
+# Logs and temporary files
+*.log
+tmp_*.py
+
+# OS / editor
+.DS_Store
+Thumbs.db
