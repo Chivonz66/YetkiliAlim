@@ -212,3 +212,29 @@ test("clone of a valid registry stays valid (mutation isolation)", () => {
   assert.deepEqual(validateRegistry(copy), []);
   assert.ok(validateRegistry(registry).length > 0);
 });
+
+test("validateRegistry never throws on non-object input", () => {
+  for (const value of [null, undefined, "x", 42, [], {}, { departments: null, roles: null }]) {
+    const errors = validateRegistry(value);
+    assert.ok(
+      Array.isArray(errors) && errors.every((e) => typeof e === "string"),
+      `expected string[] for ${String(value)}, got: ${JSON.stringify(errors)}`,
+    );
+    assert.ok(errors.length > 0, `expected errors for ${String(value)}`);
+  }
+});
+
+test("validateDepartment and validateRole never throw on null/non-object input", () => {
+  for (const value of [null, undefined, "x", 42, []]) {
+    const deptErrors = validateDepartment(value);
+    assert.ok(
+      Array.isArray(deptErrors) && deptErrors.every((e) => typeof e === "string"),
+      `expected string[] from validateDepartment(${String(value)}), got: ${JSON.stringify(deptErrors)}`,
+    );
+    const roleErrors = validateRole(value);
+    assert.ok(
+      Array.isArray(roleErrors) && roleErrors.every((e) => typeof e === "string"),
+      `expected string[] from validateRole(${String(value)}), got: ${JSON.stringify(roleErrors)}`,
+    );
+  }
+});

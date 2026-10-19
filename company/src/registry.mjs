@@ -240,8 +240,10 @@ function duplicateValues(values) {
  *   `role.persona_ref` file must exist under it.
  * @returns {string[]} error messages (empty when valid)
  */
-export function validateRegistry({ departments, roles } = {}, opts = {}) {
+export function validateRegistry(registry, opts = {}) {
   const errors = [];
+  const { departments, roles } =
+    registry && typeof registry === "object" ? registry : {};
 
   if (!Array.isArray(departments)) {
     errors.push('"departments" must be an array');
