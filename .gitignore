@@ -27,3 +27,6 @@ tmp_*.py
 # OS / editor
 .DS_Store
 Thumbs.db
+
+# Jarvis company package runtime state
+company/state/
