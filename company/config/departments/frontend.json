@@ -1,0 +1,14 @@
+{
+  "id": "frontend",
+  "name": "Frontend & UX",
+  "mission": "Erişilebilir, tutarlı ve hızlı arayüzler uygular; bileşen kütüphanesini ve tasarım sistemini yaşayarak sürdürülebilir kılar.",
+  "default_model_tier": "code",
+  "budget": { "token_budget": 850000, "max_parallel": 2 },
+  "roles": [
+    "frontend.senior-frontend",
+    "frontend.frontend-engineer",
+    "frontend.ui-engineer",
+    "frontend.accessibility-specialist",
+    "frontend.design-system-engineer"
+  ]
+}

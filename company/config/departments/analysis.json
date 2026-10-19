@@ -1,0 +1,14 @@
+{
+  "id": "analysis",
+  "name": "Analiz & Tasarım",
+  "mission": "İhtiyaçları davranışsal ve teknik gereksinimlere dönüştürür; kullanıcı deneyimini ve arayüz tasarımlarını doğrulanabilir akışlarla destekler.",
+  "default_model_tier": "smart",
+  "budget": { "token_budget": 550000, "max_parallel": 2 },
+  "roles": [
+    "analysis.functional-analyst",
+    "analysis.technical-analyst",
+    "analysis.ux-researcher",
+    "analysis.ui-designer",
+    "analysis.systems-analyst"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "management",
+  "name": "Yönetim & Ürün",
+  "mission": "Ürün vizyonunu iş hedefleriyle hizalar, gereksinimleri netleştirir ve tüm ekipler için önceliklendirilmiş, ölçülebilir teslim planları oluşturur.",
+  "default_model_tier": "smart",
+  "budget": { "token_budget": 700000, "max_parallel": 2 },
+  "roles": [
+    "management.product-owner",
+    "management.program-manager",
+    "management.business-analyst",
+    "management.requirements-engineer",
+    "management.stakeholder-liaison"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "backend",
+  "name": "Backend Mühendisliği",
+  "mission": "Ölçeklenebilir ve güvenilir servisler, API'ler ve iş mantığı geliştirir; performans, hata toleransı ve veri bütünlüğünü gözetir.",
+  "default_model_tier": "code",
+  "budget": { "token_budget": 900000, "max_parallel": 2 },
+  "roles": [
+    "backend.senior-backend",
+    "backend.backend-engineer",
+    "backend.api-engineer",
+    "backend.service-engineer",
+    "backend.performance-engineer"
+  ]
+}

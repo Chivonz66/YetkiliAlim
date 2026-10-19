@@ -1,0 +1,14 @@
+{
+  "id": "devops",
+  "name": "DevOps & Altyapı",
+  "mission": "Derleme, test ve dağıtım hatlarını otomatikleştirir; altyapıyı kod olarak yöneterek güvenilir ve tekrarlanabilir yayınlar sağlar.",
+  "default_model_tier": "code",
+  "budget": { "token_budget": 550000, "max_parallel": 1 },
+  "roles": [
+    "devops.devops-engineer",
+    "devops.ci-cd-engineer",
+    "devops.release-engineer",
+    "devops.infrastructure-engineer",
+    "devops.container-engineer"
+  ]
+}
