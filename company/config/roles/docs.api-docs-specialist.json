@@ -1,0 +1,24 @@
+{
+  "id": "docs.api-docs-specialist",
+  "department": "docs",
+  "title": "API Dokümantasyon Uzmanı",
+  "persona_ref": "prompts/roles/docs.api-docs-specialist.md",
+  "model_tier": "fast",
+  "tools": [
+    "read",
+    "grep",
+    "glob"
+  ],
+  "permission_profile": "read-only",
+  "max_parallel": 2,
+  "token_budget": 120000,
+  "approval_required_for": [],
+  "inputs": [
+    "openapi_spec",
+    "repo_context"
+  ],
+  "outputs": [
+    "api_docs",
+    "usage_examples"
+  ]
+}

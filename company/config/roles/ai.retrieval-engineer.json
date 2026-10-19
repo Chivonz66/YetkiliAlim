@@ -1,0 +1,30 @@
+{
+  "id": "ai.retrieval-engineer",
+  "department": "ai",
+  "title": "Retrieval Mühendisi",
+  "persona_ref": "prompts/roles/ai.retrieval-engineer.md",
+  "model_tier": "smart",
+  "tools": [
+    "read",
+    "grep",
+    "glob",
+    "edit",
+    "bash"
+  ],
+  "permission_profile": "engineer",
+  "max_parallel": 2,
+  "token_budget": 160000,
+  "approval_required_for": [
+    "git.push",
+    "deploy",
+    "delete"
+  ],
+  "inputs": [
+    "corpus",
+    "retrieval_spec"
+  ],
+  "outputs": [
+    "index_config",
+    "retrieval_metrics"
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "id": "security.appsec-engineer",
+  "department": "security",
+  "title": "Uygulama Güvenliği Mühendisi",
+  "persona_ref": "prompts/roles/security.appsec-engineer.md",
+  "model_tier": "smart",
+  "tools": [
+    "read",
+    "grep",
+    "glob",
+    "edit",
+    "bash"
+  ],
+  "permission_profile": "security",
+  "max_parallel": 2,
+  "token_budget": 170000,
+  "approval_required_for": [
+    "secret.read",
+    "secret.write",
+    "git.push",
+    "delete"
+  ],
+  "inputs": [
+    "repo_context",
+    "security_policy"
+  ],
+  "outputs": [
+    "sast_report",
+    "remediation_diff"
+  ]
+}

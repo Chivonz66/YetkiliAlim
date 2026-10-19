@@ -1,0 +1,30 @@
+{
+  "id": "devops.container-engineer",
+  "department": "devops",
+  "title": "Konteyner Mühendisi",
+  "persona_ref": "prompts/roles/devops.container-engineer.md",
+  "model_tier": "code",
+  "tools": [
+    "read",
+    "grep",
+    "glob",
+    "edit",
+    "bash"
+  ],
+  "permission_profile": "engineer",
+  "max_parallel": 2,
+  "token_budget": 150000,
+  "approval_required_for": [
+    "git.push",
+    "deploy",
+    "delete"
+  ],
+  "inputs": [
+    "service_manifest",
+    "base_images"
+  ],
+  "outputs": [
+    "dockerfile_diff",
+    "image_report"
+  ]
+}

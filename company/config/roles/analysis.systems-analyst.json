@@ -1,0 +1,24 @@
+{
+  "id": "analysis.systems-analyst",
+  "department": "analysis",
+  "title": "Sistem Analisti",
+  "persona_ref": "prompts/roles/analysis.systems-analyst.md",
+  "model_tier": "smart",
+  "tools": [
+    "read",
+    "grep",
+    "glob"
+  ],
+  "permission_profile": "read-only",
+  "max_parallel": 2,
+  "token_budget": 140000,
+  "approval_required_for": [],
+  "inputs": [
+    "business_processes",
+    "repo_context"
+  ],
+  "outputs": [
+    "as_is_analysis",
+    "to_be_spec"
+  ]
+}

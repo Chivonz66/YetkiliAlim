@@ -1,0 +1,30 @@
+{
+  "id": "data.data-engineer",
+  "department": "data",
+  "title": "Veri Mühendisi",
+  "persona_ref": "prompts/roles/data.data-engineer.md",
+  "model_tier": "code",
+  "tools": [
+    "read",
+    "grep",
+    "glob",
+    "edit",
+    "bash"
+  ],
+  "permission_profile": "engineer",
+  "max_parallel": 2,
+  "token_budget": 170000,
+  "approval_required_for": [
+    "git.push",
+    "deploy",
+    "delete"
+  ],
+  "inputs": [
+    "data_pipeline_spec",
+    "source_schemas"
+  ],
+  "outputs": [
+    "pipeline_code",
+    "data_tests"
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "id": "docs.technical-writer",
+  "department": "docs",
+  "title": "Teknik Yazar",
+  "persona_ref": "prompts/roles/docs.technical-writer.md",
+  "model_tier": "fast",
+  "tools": [
+    "read",
+    "grep",
+    "glob"
+  ],
+  "permission_profile": "read-only",
+  "max_parallel": 2,
+  "token_budget": 110000,
+  "approval_required_for": [],
+  "inputs": [
+    "source_docs",
+    "style_guide"
+  ],
+  "outputs": [
+    "doc_pages",
+    "review_comments"
+  ]
+}

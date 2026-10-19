@@ -1,0 +1,24 @@
+{
+  "id": "analysis.ux-researcher",
+  "department": "analysis",
+  "title": "UX Araştırmacısı",
+  "persona_ref": "prompts/roles/analysis.ux-researcher.md",
+  "model_tier": "smart",
+  "tools": [
+    "read",
+    "grep",
+    "glob"
+  ],
+  "permission_profile": "read-only",
+  "max_parallel": 1,
+  "token_budget": 120000,
+  "approval_required_for": [],
+  "inputs": [
+    "interview_notes",
+    "usage_metrics"
+  ],
+  "outputs": [
+    "research_report",
+    "persona_profiles"
+  ]
+}

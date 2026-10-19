@@ -1,0 +1,30 @@
+{
+  "id": "frontend.design-system-engineer",
+  "department": "frontend",
+  "title": "Tasarım Sistemi Mühendisi",
+  "persona_ref": "prompts/roles/frontend.design-system-engineer.md",
+  "model_tier": "code",
+  "tools": [
+    "read",
+    "grep",
+    "glob",
+    "edit",
+    "bash"
+  ],
+  "permission_profile": "engineer",
+  "max_parallel": 2,
+  "token_budget": 160000,
+  "approval_required_for": [
+    "git.push",
+    "deploy",
+    "delete"
+  ],
+  "inputs": [
+    "design_tokens",
+    "component_library"
+  ],
+  "outputs": [
+    "library_diff",
+    "storybook_updates"
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "id": "security.compliance-officer",
+  "department": "security",
+  "title": "Uyumluluk Görevlisi",
+  "persona_ref": "prompts/roles/security.compliance-officer.md",
+  "model_tier": "smart",
+  "tools": [
+    "read",
+    "grep",
+    "glob",
+    "edit",
+    "bash"
+  ],
+  "permission_profile": "security",
+  "max_parallel": 1,
+  "token_budget": 150000,
+  "approval_required_for": [
+    "secret.read",
+    "secret.write",
+    "git.push",
+    "delete"
+  ],
+  "inputs": [
+    "regulation_catalog",
+    "control_evidence"
+  ],
+  "outputs": [
+    "compliance_report",
+    "gap_list"
+  ]
+}

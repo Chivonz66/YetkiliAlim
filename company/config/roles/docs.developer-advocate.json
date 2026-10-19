@@ -1,0 +1,24 @@
+{
+  "id": "docs.developer-advocate",
+  "department": "docs",
+  "title": "Geliştirici Temsilcisi",
+  "persona_ref": "prompts/roles/docs.developer-advocate.md",
+  "model_tier": "fast",
+  "tools": [
+    "read",
+    "grep",
+    "glob"
+  ],
+  "permission_profile": "read-only",
+  "max_parallel": 2,
+  "token_budget": 110000,
+  "approval_required_for": [],
+  "inputs": [
+    "release_notes",
+    "community_feedback"
+  ],
+  "outputs": [
+    "blog_post",
+    "sample_code"
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "id": "ai.ml-engineer",
+  "department": "ai",
+  "title": "ML Mühendisi",
+  "persona_ref": "prompts/roles/ai.ml-engineer.md",
+  "model_tier": "smart",
+  "tools": [
+    "read",
+    "grep",
+    "glob",
+    "edit",
+    "bash"
+  ],
+  "permission_profile": "engineer",
+  "max_parallel": 2,
+  "token_budget": 190000,
+  "approval_required_for": [
+    "git.push",
+    "deploy",
+    "delete"
+  ],
+  "inputs": [
+    "model_spec",
+    "training_data"
+  ],
+  "outputs": [
+    "training_code",
+    "model_metrics"
+  ]
+}

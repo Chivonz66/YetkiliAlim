@@ -1,0 +1,31 @@
+{
+  "id": "ops.sre",
+  "department": "ops",
+  "title": "Site Güvenilirlik Mühendisi",
+  "persona_ref": "prompts/roles/ops.sre.md",
+  "model_tier": "code",
+  "tools": [
+    "read",
+    "grep",
+    "glob",
+    "edit",
+    "bash"
+  ],
+  "permission_profile": "ops",
+  "max_parallel": 2,
+  "token_budget": 170000,
+  "approval_required_for": [
+    "git.push",
+    "deploy",
+    "delete",
+    "infra.change"
+  ],
+  "inputs": [
+    "slo_definition",
+    "monitoring_data"
+  ],
+  "outputs": [
+    "runbook_update",
+    "reliability_report"
+  ]
+}

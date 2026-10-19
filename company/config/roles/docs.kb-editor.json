@@ -1,0 +1,24 @@
+{
+  "id": "docs.kb-editor",
+  "department": "docs",
+  "title": "Bilgi Tabanı Editörü",
+  "persona_ref": "prompts/roles/docs.kb-editor.md",
+  "model_tier": "fast",
+  "tools": [
+    "read",
+    "grep",
+    "glob"
+  ],
+  "permission_profile": "read-only",
+  "max_parallel": 2,
+  "token_budget": 100000,
+  "approval_required_for": [],
+  "inputs": [
+    "kb_entries",
+    "support_tickets"
+  ],
+  "outputs": [
+    "curated_articles",
+    "index_updates"
+  ]
+}

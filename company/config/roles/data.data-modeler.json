@@ -1,0 +1,30 @@
+{
+  "id": "data.data-modeler",
+  "department": "data",
+  "title": "Veri Modeleri",
+  "persona_ref": "prompts/roles/data.data-modeler.md",
+  "model_tier": "code",
+  "tools": [
+    "read",
+    "grep",
+    "glob",
+    "edit",
+    "bash"
+  ],
+  "permission_profile": "engineer",
+  "max_parallel": 1,
+  "token_budget": 150000,
+  "approval_required_for": [
+    "git.push",
+    "deploy",
+    "delete"
+  ],
+  "inputs": [
+    "domain_model",
+    "source_schemas"
+  ],
+  "outputs": [
+    "erd_diagram",
+    "ddl_script"
+  ]
+}

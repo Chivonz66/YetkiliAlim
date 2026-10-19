@@ -1,0 +1,30 @@
+{
+  "id": "frontend.senior-frontend",
+  "department": "frontend",
+  "title": "Kıdemli Frontend Mühendisi",
+  "persona_ref": "prompts/roles/frontend.senior-frontend.md",
+  "model_tier": "code",
+  "tools": [
+    "read",
+    "grep",
+    "glob",
+    "edit",
+    "bash"
+  ],
+  "permission_profile": "engineer",
+  "max_parallel": 2,
+  "token_budget": 180000,
+  "approval_required_for": [
+    "git.push",
+    "deploy",
+    "delete"
+  ],
+  "inputs": [
+    "task_spec",
+    "repo_context"
+  ],
+  "outputs": [
+    "diff",
+    "test_report"
+  ]
+}

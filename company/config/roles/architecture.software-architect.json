@@ -1,0 +1,30 @@
+{
+  "id": "architecture.software-architect",
+  "department": "architecture",
+  "title": "Yazılım Mimarı",
+  "persona_ref": "prompts/roles/architecture.software-architect.md",
+  "model_tier": "smart",
+  "tools": [
+    "read",
+    "grep",
+    "glob",
+    "edit",
+    "bash"
+  ],
+  "permission_profile": "engineer",
+  "max_parallel": 2,
+  "token_budget": 180000,
+  "approval_required_for": [
+    "git.push",
+    "deploy",
+    "delete"
+  ],
+  "inputs": [
+    "repo_context",
+    "coding_standards"
+  ],
+  "outputs": [
+    "component_design",
+    "adr"
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "id": "qa.qa-lead",
+  "department": "qa",
+  "title": "QA Lideri",
+  "persona_ref": "prompts/roles/qa.qa-lead.md",
+  "model_tier": "smart",
+  "tools": [
+    "read",
+    "grep",
+    "glob"
+  ],
+  "permission_profile": "reviewer",
+  "max_parallel": 2,
+  "token_budget": 150000,
+  "approval_required_for": [],
+  "inputs": [
+    "test_plan",
+    "release_scope"
+  ],
+  "outputs": [
+    "qa_report",
+    "go_no_go_decision"
+  ]
+}

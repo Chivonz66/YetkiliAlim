@@ -1,0 +1,24 @@
+{
+  "id": "management.requirements-engineer",
+  "department": "management",
+  "title": "Gereksinim Mühendisi",
+  "persona_ref": "prompts/roles/management.requirements-engineer.md",
+  "model_tier": "smart",
+  "tools": [
+    "read",
+    "grep",
+    "glob"
+  ],
+  "permission_profile": "read-only",
+  "max_parallel": 2,
+  "token_budget": 160000,
+  "approval_required_for": [],
+  "inputs": [
+    "stakeholder_needs",
+    "existing_specs"
+  ],
+  "outputs": [
+    "srs_document",
+    "traceability_matrix"
+  ]
+}

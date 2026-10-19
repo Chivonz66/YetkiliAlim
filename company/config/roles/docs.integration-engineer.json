@@ -1,0 +1,24 @@
+{
+  "id": "docs.integration-engineer",
+  "department": "docs",
+  "title": "Entegrasyon Doküman Mühendisi",
+  "persona_ref": "prompts/roles/docs.integration-engineer.md",
+  "model_tier": "fast",
+  "tools": [
+    "read",
+    "grep",
+    "glob"
+  ],
+  "permission_profile": "read-only",
+  "max_parallel": 1,
+  "token_budget": 120000,
+  "approval_required_for": [],
+  "inputs": [
+    "integration_specs",
+    "partner_guides"
+  ],
+  "outputs": [
+    "integration_guide",
+    "sequence_diagrams"
+  ]
+}

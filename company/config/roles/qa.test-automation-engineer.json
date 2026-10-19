@@ -1,0 +1,30 @@
+{
+  "id": "qa.test-automation-engineer",
+  "department": "qa",
+  "title": "Test Otomasyon Mühendisi",
+  "persona_ref": "prompts/roles/qa.test-automation-engineer.md",
+  "model_tier": "code",
+  "tools": [
+    "read",
+    "grep",
+    "glob",
+    "edit",
+    "bash"
+  ],
+  "permission_profile": "engineer",
+  "max_parallel": 2,
+  "token_budget": 170000,
+  "approval_required_for": [
+    "git.push",
+    "deploy",
+    "delete"
+  ],
+  "inputs": [
+    "test_cases",
+    "repo_context"
+  ],
+  "outputs": [
+    "test_code",
+    "automation_report"
+  ]
+}

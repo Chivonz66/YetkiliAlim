@@ -1,0 +1,31 @@
+{
+  "id": "ops.observability-engineer",
+  "department": "ops",
+  "title": "Gözlemlenebilirlik Mühendisi",
+  "persona_ref": "prompts/roles/ops.observability-engineer.md",
+  "model_tier": "code",
+  "tools": [
+    "read",
+    "grep",
+    "glob",
+    "edit",
+    "bash"
+  ],
+  "permission_profile": "ops",
+  "max_parallel": 2,
+  "token_budget": 160000,
+  "approval_required_for": [
+    "git.push",
+    "deploy",
+    "delete",
+    "infra.change"
+  ],
+  "inputs": [
+    "telemetry_stack",
+    "incident_history"
+  ],
+  "outputs": [
+    "dashboards",
+    "alert_rules"
+  ]
+}

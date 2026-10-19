@@ -1,0 +1,30 @@
+{
+  "id": "backend.performance-engineer",
+  "department": "backend",
+  "title": "Performans Mühendisi",
+  "persona_ref": "prompts/roles/backend.performance-engineer.md",
+  "model_tier": "code",
+  "tools": [
+    "read",
+    "grep",
+    "glob",
+    "edit",
+    "bash"
+  ],
+  "permission_profile": "engineer",
+  "max_parallel": 1,
+  "token_budget": 170000,
+  "approval_required_for": [
+    "git.push",
+    "deploy",
+    "delete"
+  ],
+  "inputs": [
+    "performance_profile",
+    "repo_context"
+  ],
+  "outputs": [
+    "optimization_diff",
+    "benchmark_report"
+  ]
+}

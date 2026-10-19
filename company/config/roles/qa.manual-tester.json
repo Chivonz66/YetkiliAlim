@@ -1,0 +1,24 @@
+{
+  "id": "qa.manual-tester",
+  "department": "qa",
+  "title": "Manuel Test Uzmanı",
+  "persona_ref": "prompts/roles/qa.manual-tester.md",
+  "model_tier": "vision",
+  "tools": [
+    "read",
+    "grep",
+    "glob"
+  ],
+  "permission_profile": "read-only",
+  "max_parallel": 1,
+  "token_budget": 100000,
+  "approval_required_for": [],
+  "inputs": [
+    "test_cases",
+    "build_artifact"
+  ],
+  "outputs": [
+    "test_results",
+    "bug_reports"
+  ]
+}
