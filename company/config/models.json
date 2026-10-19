@@ -1,0 +1,10 @@
+{
+  "version": "0.1.0",
+  "note": "Placeholder model-tier mapping. The owner (Chivonz) must fill provider/model before any paid model call. Empty strings mean 'not configured'.",
+  "tiers": {
+    "fast":   { "description": "Cheap, low-latency tier for routine/deterministic-heavy roles.", "provider": "", "model": "" },
+    "smart":  { "description": "Reasoning tier for architecture, security, management and AI roles.", "provider": "", "model": "" },
+    "code":   { "description": "Strong coding tier for backend, frontend, data, qa and devops engineering roles.", "provider": "", "model": "" },
+    "vision": { "description": "Multimodal tier for roles that must inspect screenshots/UI (e.g. ui-designer, manual-tester).", "provider": "", "model": "" }
+  }
+}
