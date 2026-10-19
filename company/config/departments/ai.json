@@ -1,0 +1,14 @@
+{
+  "id": "ai",
+  "name": "AI & ML",
+  "mission": "Model eğitimi, ince ayarı ve değerlendirme süreçlerini yönetir; prompt, retrieval ve çıkarım bileşenlerini güvenilir ve ölçülebilir hale getirir.",
+  "default_model_tier": "smart",
+  "budget": { "token_budget": 800000, "max_parallel": 2 },
+  "roles": [
+    "ai.ml-engineer",
+    "ai.prompt-engineer",
+    "ai.data-scientist",
+    "ai.model-evaluator",
+    "ai.retrieval-engineer"
+  ]
+}

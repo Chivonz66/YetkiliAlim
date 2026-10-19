@@ -1,0 +1,14 @@
+{
+  "id": "docs",
+  "name": "Dokümantasyon & Entegrasyon",
+  "mission": "Ürün, API ve entegrasyon dokümanlarını güncel ve anlaşılır tutar; bilgi tabanını geliştirici deneyimini iyileştirecek şekilde derler.",
+  "default_model_tier": "fast",
+  "budget": { "token_budget": 300000, "max_parallel": 2 },
+  "roles": [
+    "docs.technical-writer",
+    "docs.api-docs-specialist",
+    "docs.integration-engineer",
+    "docs.developer-advocate",
+    "docs.kb-editor"
+  ]
+}

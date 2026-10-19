@@ -1,0 +1,14 @@
+{
+  "id": "ops",
+  "name": "Operasyon & Destek",
+  "mission": "Sistemleri canlı ortamda izler, olayları hızlı çözer ve sürekli iyileştirme geri bildirimleriyle hizmet sürekliliğini artırır.",
+  "default_model_tier": "smart",
+  "budget": { "token_budget": 450000, "max_parallel": 2 },
+  "roles": [
+    "ops.sre",
+    "ops.observability-engineer",
+    "ops.incident-manager",
+    "ops.support-engineer",
+    "ops.continuous-improvement-analyst"
+  ]
+}

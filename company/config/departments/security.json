@@ -1,0 +1,14 @@
+{
+  "id": "security",
+  "name": "Güvenlik & Uyum",
+  "mission": "Tehdit modelleri ve güvenlik kontrolleriyle sistemleri savunur; gizli bilgileri korur, mevzuat ve standart uyumunu gözetir.",
+  "default_model_tier": "smart",
+  "budget": { "token_budget": 500000, "max_parallel": 1 },
+  "roles": [
+    "security.security-architect",
+    "security.appsec-engineer",
+    "security.compliance-officer",
+    "security.secrets-manager",
+    "security.threat-modeler"
+  ]
+}

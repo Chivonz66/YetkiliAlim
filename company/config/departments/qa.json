@@ -1,0 +1,14 @@
+{
+  "id": "qa",
+  "name": "Test & Kalite",
+  "mission": "Test stratejilerini uygular, regresyon ve performans risklerini erken yakalar; yayına çıkmadan önce kalite kapısını çalıştırır.",
+  "default_model_tier": "code",
+  "budget": { "token_budget": 650000, "max_parallel": 2 },
+  "roles": [
+    "qa.qa-lead",
+    "qa.test-automation-engineer",
+    "qa.manual-tester",
+    "qa.performance-tester",
+    "qa.regression-analyst"
+  ]
+}

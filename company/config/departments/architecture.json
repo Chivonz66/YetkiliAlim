@@ -1,0 +1,14 @@
+{
+  "id": "architecture",
+  "name": "Mimari",
+  "mission": "Sistemlerin bütünlüğünü ve sürdürülebilirliğini güvence altına alır; teknoloji seçimlerini, bileşen sınırlarını ve entegrasyon sözleşmelerini tanımlar.",
+  "default_model_tier": "smart",
+  "budget": { "token_budget": 650000, "max_parallel": 2 },
+  "roles": [
+    "architecture.chief-architect",
+    "architecture.systems-architect",
+    "architecture.software-architect",
+    "architecture.data-architect",
+    "architecture.integration-architect"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "data",
+  "name": "Veri & Veritabanı",
+  "mission": "Veri modellerini, depolarını ve aktarım hatlarını tasarlar; kalite, doğruluk ve sorgu performansını sürekli ölçer.",
+  "default_model_tier": "code",
+  "budget": { "token_budget": 600000, "max_parallel": 2 },
+  "roles": [
+    "data.data-engineer",
+    "data.dba",
+    "data.data-modeler",
+    "data.etl-engineer",
+    "data.data-quality-analyst"
+  ]
+}
