@@ -1,0 +1,30 @@
+{
+  "id": "backend.service-engineer",
+  "department": "backend",
+  "title": "Servis Mühendisi",
+  "persona_ref": "prompts/roles/backend.service-engineer.md",
+  "model_tier": "code",
+  "tools": [
+    "read",
+    "grep",
+    "glob",
+    "edit",
+    "bash"
+  ],
+  "permission_profile": "engineer",
+  "max_parallel": 2,
+  "token_budget": 150000,
+  "approval_required_for": [
+    "git.push",
+    "deploy",
+    "delete"
+  ],
+  "inputs": [
+    "service_spec",
+    "runtime_logs"
+  ],
+  "outputs": [
+    "diff",
+    "service_config"
+  ]
+}

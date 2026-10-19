@@ -1,0 +1,30 @@
+{
+  "id": "frontend.ui-engineer",
+  "department": "frontend",
+  "title": "UI Mühendisi",
+  "persona_ref": "prompts/roles/frontend.ui-engineer.md",
+  "model_tier": "code",
+  "tools": [
+    "read",
+    "grep",
+    "glob",
+    "edit",
+    "bash"
+  ],
+  "permission_profile": "engineer",
+  "max_parallel": 2,
+  "token_budget": 150000,
+  "approval_required_for": [
+    "git.push",
+    "deploy",
+    "delete"
+  ],
+  "inputs": [
+    "design_tokens",
+    "component_spec"
+  ],
+  "outputs": [
+    "component_diff",
+    "visual_test_report"
+  ]
+}

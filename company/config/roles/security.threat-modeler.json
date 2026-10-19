@@ -1,0 +1,24 @@
+{
+  "id": "security.threat-modeler",
+  "department": "security",
+  "title": "Tehdit Modelleyicisi",
+  "persona_ref": "prompts/roles/security.threat-modeler.md",
+  "model_tier": "smart",
+  "tools": [
+    "read",
+    "grep",
+    "glob"
+  ],
+  "permission_profile": "reviewer",
+  "max_parallel": 2,
+  "token_budget": 160000,
+  "approval_required_for": [],
+  "inputs": [
+    "system_design",
+    "asset_inventory"
+  ],
+  "outputs": [
+    "threat_model",
+    "mitigation_plan"
+  ]
+}

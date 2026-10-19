@@ -1,0 +1,24 @@
+{
+  "id": "qa.regression-analyst",
+  "department": "qa",
+  "title": "Regresyon Analisti",
+  "persona_ref": "prompts/roles/qa.regression-analyst.md",
+  "model_tier": "smart",
+  "tools": [
+    "read",
+    "grep",
+    "glob"
+  ],
+  "permission_profile": "reviewer",
+  "max_parallel": 2,
+  "token_budget": 140000,
+  "approval_required_for": [],
+  "inputs": [
+    "change_log",
+    "test_history"
+  ],
+  "outputs": [
+    "regression_report",
+    "risk_assessment"
+  ]
+}

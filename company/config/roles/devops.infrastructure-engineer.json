@@ -1,0 +1,30 @@
+{
+  "id": "devops.infrastructure-engineer",
+  "department": "devops",
+  "title": "Altyapı Mühendisi",
+  "persona_ref": "prompts/roles/devops.infrastructure-engineer.md",
+  "model_tier": "code",
+  "tools": [
+    "read",
+    "grep",
+    "glob",
+    "edit",
+    "bash"
+  ],
+  "permission_profile": "engineer",
+  "max_parallel": 1,
+  "token_budget": 170000,
+  "approval_required_for": [
+    "git.push",
+    "deploy",
+    "delete"
+  ],
+  "inputs": [
+    "infra_spec",
+    "cloud_account"
+  ],
+  "outputs": [
+    "iac_diff",
+    "provision_report"
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "id": "architecture.chief-architect",
+  "department": "architecture",
+  "title": "Baş Mimar",
+  "persona_ref": "prompts/roles/architecture.chief-architect.md",
+  "model_tier": "smart",
+  "tools": [
+    "read",
+    "grep",
+    "glob"
+  ],
+  "permission_profile": "reviewer",
+  "max_parallel": 2,
+  "token_budget": 200000,
+  "approval_required_for": [],
+  "inputs": [
+    "architecture_baseline",
+    "quality_attributes"
+  ],
+  "outputs": [
+    "architecture_review",
+    "technology_radar"
+  ]
+}

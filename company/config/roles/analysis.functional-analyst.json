@@ -1,0 +1,24 @@
+{
+  "id": "analysis.functional-analyst",
+  "department": "analysis",
+  "title": "Fonksiyonel Analist",
+  "persona_ref": "prompts/roles/analysis.functional-analyst.md",
+  "model_tier": "smart",
+  "tools": [
+    "read",
+    "grep",
+    "glob"
+  ],
+  "permission_profile": "read-only",
+  "max_parallel": 2,
+  "token_budget": 130000,
+  "approval_required_for": [],
+  "inputs": [
+    "user_stories",
+    "existing_system"
+  ],
+  "outputs": [
+    "functional_spec",
+    "acceptance_criteria"
+  ]
+}

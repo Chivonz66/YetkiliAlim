@@ -1,0 +1,24 @@
+{
+  "id": "management.program-manager",
+  "department": "management",
+  "title": "Program Yöneticisi",
+  "persona_ref": "prompts/roles/management.program-manager.md",
+  "model_tier": "smart",
+  "tools": [
+    "read",
+    "grep",
+    "glob"
+  ],
+  "permission_profile": "reviewer",
+  "max_parallel": 2,
+  "token_budget": 150000,
+  "approval_required_for": [],
+  "inputs": [
+    "program_plan",
+    "status_reports"
+  ],
+  "outputs": [
+    "program_status",
+    "risk_register"
+  ]
+}

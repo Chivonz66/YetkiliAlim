@@ -1,0 +1,30 @@
+{
+  "id": "data.etl-engineer",
+  "department": "data",
+  "title": "ETL Mühendisi",
+  "persona_ref": "prompts/roles/data.etl-engineer.md",
+  "model_tier": "code",
+  "tools": [
+    "read",
+    "grep",
+    "glob",
+    "edit",
+    "bash"
+  ],
+  "permission_profile": "engineer",
+  "max_parallel": 2,
+  "token_budget": 160000,
+  "approval_required_for": [
+    "git.push",
+    "deploy",
+    "delete"
+  ],
+  "inputs": [
+    "etl_spec",
+    "source_samples"
+  ],
+  "outputs": [
+    "etl_job",
+    "validation_report"
+  ]
+}

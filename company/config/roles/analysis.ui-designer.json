@@ -1,0 +1,24 @@
+{
+  "id": "analysis.ui-designer",
+  "department": "analysis",
+  "title": "UI Tasarımcısı",
+  "persona_ref": "prompts/roles/analysis.ui-designer.md",
+  "model_tier": "vision",
+  "tools": [
+    "read",
+    "grep",
+    "glob"
+  ],
+  "permission_profile": "read-only",
+  "max_parallel": 1,
+  "token_budget": 110000,
+  "approval_required_for": [],
+  "inputs": [
+    "design_system",
+    "wireframes"
+  ],
+  "outputs": [
+    "ui_mockups",
+    "style_tokens"
+  ]
+}

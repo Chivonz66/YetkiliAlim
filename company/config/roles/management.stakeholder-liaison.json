@@ -1,0 +1,24 @@
+{
+  "id": "management.stakeholder-liaison",
+  "department": "management",
+  "title": "Paydaş İlişkileri Sorumlusu",
+  "persona_ref": "prompts/roles/management.stakeholder-liaison.md",
+  "model_tier": "smart",
+  "tools": [
+    "read",
+    "grep",
+    "glob"
+  ],
+  "permission_profile": "read-only",
+  "max_parallel": 2,
+  "token_budget": 120000,
+  "approval_required_for": [],
+  "inputs": [
+    "meeting_notes",
+    "stakeholder_registry"
+  ],
+  "outputs": [
+    "meeting_minutes",
+    "stakeholder_updates"
+  ]
+}

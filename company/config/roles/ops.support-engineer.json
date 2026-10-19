@@ -1,0 +1,31 @@
+{
+  "id": "ops.support-engineer",
+  "department": "ops",
+  "title": "Destek Mühendisi",
+  "persona_ref": "prompts/roles/ops.support-engineer.md",
+  "model_tier": "fast",
+  "tools": [
+    "read",
+    "grep",
+    "glob",
+    "edit",
+    "bash"
+  ],
+  "permission_profile": "ops",
+  "max_parallel": 2,
+  "token_budget": 100000,
+  "approval_required_for": [
+    "git.push",
+    "deploy",
+    "delete",
+    "infra.change"
+  ],
+  "inputs": [
+    "support_ticket",
+    "system_logs"
+  ],
+  "outputs": [
+    "resolution_notes",
+    "ticket_update"
+  ]
+}

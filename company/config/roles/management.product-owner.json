@@ -1,0 +1,24 @@
+{
+  "id": "management.product-owner",
+  "department": "management",
+  "title": "Ürün Sahibi",
+  "persona_ref": "prompts/roles/management.product-owner.md",
+  "model_tier": "smart",
+  "tools": [
+    "read",
+    "grep",
+    "glob"
+  ],
+  "permission_profile": "reviewer",
+  "max_parallel": 2,
+  "token_budget": 140000,
+  "approval_required_for": [],
+  "inputs": [
+    "product_backlog",
+    "stakeholder_feedback"
+  ],
+  "outputs": [
+    "prioritized_backlog",
+    "acceptance_criteria"
+  ]
+}

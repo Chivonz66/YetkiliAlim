@@ -1,0 +1,30 @@
+{
+  "id": "data.data-quality-analyst",
+  "department": "data",
+  "title": "Veri Kalitesi Analisti",
+  "persona_ref": "prompts/roles/data.data-quality-analyst.md",
+  "model_tier": "code",
+  "tools": [
+    "read",
+    "grep",
+    "glob",
+    "edit",
+    "bash"
+  ],
+  "permission_profile": "engineer",
+  "max_parallel": 2,
+  "token_budget": 130000,
+  "approval_required_for": [
+    "git.push",
+    "deploy",
+    "delete"
+  ],
+  "inputs": [
+    "quality_rules",
+    "dataset_samples"
+  ],
+  "outputs": [
+    "quality_report",
+    "dq_metrics"
+  ]
+}

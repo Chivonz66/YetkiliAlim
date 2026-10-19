@@ -1,0 +1,30 @@
+{
+  "id": "ai.prompt-engineer",
+  "department": "ai",
+  "title": "Prompt Mühendisi",
+  "persona_ref": "prompts/roles/ai.prompt-engineer.md",
+  "model_tier": "smart",
+  "tools": [
+    "read",
+    "grep",
+    "glob",
+    "edit",
+    "bash"
+  ],
+  "permission_profile": "engineer",
+  "max_parallel": 2,
+  "token_budget": 140000,
+  "approval_required_for": [
+    "git.push",
+    "deploy",
+    "delete"
+  ],
+  "inputs": [
+    "task_examples",
+    "model_docs"
+  ],
+  "outputs": [
+    "prompt_library",
+    "eval_results"
+  ]
+}

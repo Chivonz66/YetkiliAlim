@@ -1,0 +1,24 @@
+{
+  "id": "management.business-analyst",
+  "department": "management",
+  "title": "İş Analisti",
+  "persona_ref": "prompts/roles/management.business-analyst.md",
+  "model_tier": "smart",
+  "tools": [
+    "read",
+    "grep",
+    "glob"
+  ],
+  "permission_profile": "read-only",
+  "max_parallel": 1,
+  "token_budget": 130000,
+  "approval_required_for": [],
+  "inputs": [
+    "business_requirements",
+    "process_docs"
+  ],
+  "outputs": [
+    "gap_analysis",
+    "process_map"
+  ]
+}

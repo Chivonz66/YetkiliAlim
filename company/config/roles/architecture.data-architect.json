@@ -1,0 +1,30 @@
+{
+  "id": "architecture.data-architect",
+  "department": "architecture",
+  "title": "Veri Mimarı",
+  "persona_ref": "prompts/roles/architecture.data-architect.md",
+  "model_tier": "smart",
+  "tools": [
+    "read",
+    "grep",
+    "glob",
+    "edit",
+    "bash"
+  ],
+  "permission_profile": "engineer",
+  "max_parallel": 1,
+  "token_budget": 170000,
+  "approval_required_for": [
+    "git.push",
+    "deploy",
+    "delete"
+  ],
+  "inputs": [
+    "data_domain_map",
+    "regulation_docs"
+  ],
+  "outputs": [
+    "data_model",
+    "data_flow_diagram"
+  ]
+}

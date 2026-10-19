@@ -1,0 +1,30 @@
+{
+  "id": "frontend.frontend-engineer",
+  "department": "frontend",
+  "title": "Frontend Mühendisi",
+  "persona_ref": "prompts/roles/frontend.frontend-engineer.md",
+  "model_tier": "code",
+  "tools": [
+    "read",
+    "grep",
+    "glob",
+    "edit",
+    "bash"
+  ],
+  "permission_profile": "engineer",
+  "max_parallel": 2,
+  "token_budget": 160000,
+  "approval_required_for": [
+    "git.push",
+    "deploy",
+    "delete"
+  ],
+  "inputs": [
+    "task_spec",
+    "ui_spec"
+  ],
+  "outputs": [
+    "diff",
+    "unit_tests"
+  ]
+}
