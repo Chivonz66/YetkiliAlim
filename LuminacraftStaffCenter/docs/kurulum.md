@@ -1,0 +1,213 @@
+# Kurulum Kılavuzu (Supabase + Edge Functions + Yerel Geliştirme)
+
+Bu kılavuz, Luminacraft Staff Center'ı **sıfırdan çalışır hale getirmek** için gereken adımları içerir. Uygulama mock veri kullanmaz: Supabase projesi, göçler, Edge Functions ve ilk yönetici olmadan hiçbir ekran gerçek veri göstermez.
+
+Toplam süre: yaklaşık 20–30 dakika. Gereksinimler: Node.js 20+, npm, bir Supabase hesabı ve (Edge dağıtımı için) Supabase CLI, ayrıca Discord entegrasyonu istenirse bir Discord uygulaması/botu.
+
+---
+
+## 1. Supabase projesi oluşturma
+
+1. [supabase.com](https://supabase.com) → **New project**.
+2. Organization, proje adı (örn. `luminacraft-staff`), güçlü bir veritabanı parolası ve bölge seçin. Parolayı kaydedin; ileride `psql` ile göç uygulayacaksanız gerekecek.
+3. Proje hazır olunca **Project Settings → API** ekranından şunları kopyalayın:
+   - **Project URL** → `VITE_SUPABASE_URL` / Edge `SUPABASE_URL`
+   - **anon public** anahtarı → `VITE_SUPABASE_ANON_KEY` (tarayıcıya derlenir, RLS ile sınırlandırılır)
+   - **service_role** anahtarı → yalnızca Edge Functions ve CLI içinde kullanılır; **asla** `.env` dosyasına veya istemci koduna yazmayın, GitHub'a yüklemeyin.
+4. **Project Settings → API → JWT Settings / Project API keys** alanında `service_role` anahtarının "secret" olduğunu doğrulayın. Bu anahtar RLS'yi atlar.
+
+## 2. Migrations dosyalarını sırayla uygula
+
+Dört SQL dosyası `LuminacraftStaffCenter/supabase/migrations/` altındadır. **Sıra önemlidir**; şema → RLS → fonksiyon/tetikleyici → tohum veri.
+
+| Sıra | Dosya | Ne yapar |
+| --- | --- | --- |
+| 1 | `0001_initial_schema.sql` | `pgcrypto` uzantısı, 17 tablo (`positions`, `questions`, `applications`, `admins`, `admin_sessions`, `app_settings`, `rate_limits`, `discord_links`, `notification_queue`, `audit_logs` vb.), indeksler. |
+| 2 | `0002_rls_policies.sql` | Tüm tablolar için RLS; anon'a yalnızca etkin soru/pozisyon/kategori/ölçüt okuma; `lookup_application` ve `get_public_questions` RPC'leri. |
+| 3 | `0003_functions_triggers.sql` | `updated_at`, takip numarası, durum geçişi geçmişi, salt okunur denetim günlüğü, puan bütünlüğü, temizleme fonksiyonları. |
+| 4 | `0004_seed_data.sql` | 2 pozisyon, 5 kategori, 6 puan ölçütü (ağırlık toplamı 100), 13 soru, seçenekler ve varsayılan `app_settings`. |
+
+**Yöntem A — Supabase SQL Editor (önerilen):**
+
+1. Supabase Dashboard → **SQL Editor → New query**.
+2. `0001_initial_schema.sql` içeriğini yapıştırın → **Run**. "Success" görmeden sonraki dosyaya geçmeyin.
+3. Aynı işlemi `0002`, `0003`, `0004` için sırayla yapın.
+4. Tohum veri (`0004`) `ON CONFLICT DO NOTHING` kullanır; dosyayı birden fazla kez çalıştırmak veri çoğaltmaz.
+
+**Yöntem B — psql (yerel/CLI):**
+
+```bash
+export DATABASE_URL='postgresql://postgres:<DB-PAROLASI>@<HOST>:6543/postgres'
+psql "$DATABASE_URL" -f supabase/migrations/0001_initial_schema.sql
+psql "$DATABASE_URL" -f supabase/migrations/0002_rls_policies.sql
+psql "$DATABASE_URL" -f supabase/migrations/0003_functions_triggers.sql
+psql "$DATABASE_URL" -f supabase/migrations/0004_seed_data.sql
+```
+
+> Bu dosyalar Supabase CLI'nin zaman damgalı göç adlandırmasını kullanmaz; bu yüzden `supabase db push` yerine yukarıdaki sıralı yöntemlerden birini kullanın.
+
+**Göç sonrası hızlı kontrol (SQL Editor):**
+
+```sql
+select count(*) as pozisyon from public.positions;        -- 2 olmalı
+select count(*) as soru from public.questions;            -- 13 olmalı
+select sum(weight) as agirlik from public.score_criteria; -- 100 olmalı
+select count(*) as ayar from public.app_settings;         -- 6 olmalı
+```
+
+## 3. `.env` dosyasını oluştur
+
+```bash
+cd LuminacraftStaffCenter
+cp .env.example .env          # PowerShell: Copy-Item .env.example .env
+```
+
+`.env` içeriği (değerlerin yerine kendi gerçek değerlerinizi yazın):
+
+```dotenv
+VITE_SUPABASE_URL=https://sizin-projeniz.supabase.co
+VITE_SUPABASE_ANON_KEY=sizin-anon-keyiniz
+VITE_BASE_PATH=/
+```
+
+- Yerel geliştirmede `VITE_BASE_PATH=/` kalabilir. GitHub Pages iş akışı bunu otomatik olarak `/DEPO-ADI/` yapar; elle değiştirmeyin.
+- `.env` dosyası `.gitignore` ile kapsanır. İçine `service_role`, bot token veya parola **koymayın**; `VITE_` ön eki bu değerleri tarayıcı paketine gömer.
+- Değişiklikten sonra dev sunucusunu yeniden başlatın.
+
+## 4. İlk yöneticiyi oluştur (zorunlu)
+
+Arayüzde oturum açabilmek için en az bir yönetici kaydı gerekir. CLI, parolayı PBKDF2-SHA256 (210.000 yineleme, 16 bayt tuz, 32 bayt anahtar) ile özetleyip yalnızca özeti veritabanına yazar; ham parola diske veya loglara gitmez.
+
+```bash
+SUPABASE_URL=https://sizin-projeniz.supabase.co \
+SUPABASE_SERVICE_ROLE_KEY=<sizin-service-role-anahtariniz> \
+ADMIN_USERNAME=<yonetici-kullanici-adi> \
+ADMIN_PASSWORD=<en-az-12-karakterli-parola> \
+node scripts/create-first-admin.mjs
+```
+
+PowerShell (tek satırda):
+
+```powershell
+$env:SUPABASE_URL='https://sizin-projeniz.supabase.co'
+$env:SUPABASE_SERVICE_ROLE_KEY='<sizin-service-role-anahtariniz>'
+$env:ADMIN_USERNAME='<yonetici-kullanici-adi>'
+$env:ADMIN_PASSWORD='<en-az-12-karakterli-parola>'
+node scripts/create-first-admin.mjs
+```
+
+Kurallar: `ADMIN_USERNAME` 3–32 karakter, yalnızca harf/rakam/`.`/`_`/`-`; `ADMIN_PASSWORD` en az 12 karakter. Araç zaten bir yönetici varsa işlemi reddeder. Bilinçli değiştirme gerekiyorsa:
+
+```bash
+ALLOW_REPLACE_ADMIN=1 SETUP_TOKEN=LUMINACRAFT-ADMIN-REPLACE-ONAY \
+SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... \
+ADMIN_USERNAME=... ADMIN_PASSWORD=... \
+node scripts/create-first-admin.mjs
+```
+
+`SETUP_TOKEN` bir kimlik bilgisi değil, bu dokümanda yer alan yazılı onay ifadesidir. Komut başarılı olduğunda `Tamamlandı: İlk yönetici başarıyla oluşturuldu.` mesajını görürsünüz.
+
+> `admin-auth` ucundaki `setup` eylemi yalnızca `admins` tablosu boşken çalışır. Kurulumu CLI ile hemen yapın; böylece bu açık pencere kapanır. Ayrıntı: [guvenlik.md](guvenlik.md).
+
+## 5. Edge Functions gizli anahtarlarını tanımla
+
+Kodda gerçekten okunan değişkenler bunlardır (`_shared/db.ts`, `_shared/auth.ts`, `_shared/pure.ts`, uç dosyaları):
+
+| Değişken | Zorunluluk | Kullanım yeri / amaç |
+| --- | --- | --- |
+| `SUPABASE_URL` | Evet | Tüm uçlarda veritabanı istemcisi (`VITE_SUPABASE_URL` yedek). |
+| `SUPABASE_SERVICE_ROLE_KEY` | Evet | Tüm uçlarda yazma/silinme işlemleri; yalnızca sunucu. |
+| `SESSION_SECRET` | Evet | `admin-auth` oturum imzası (HMAC-SHA256), `discord-oauth` `state` özeti. Uzun rastgele bir değer kullanın. |
+| `RATE_LIMIT_SALT` | Önerilir | `submit-application` IP özetleme tuzu; ham IP saklanmaz. |
+| `ALLOWED_ORIGINS` | Üretimde evet | `_shared/cors.ts` allowlist'i ve OAuth sonrası güvenli dönüş adresi. Örn. `https://KULLANICI.github.io,http://localhost:5173`. |
+| `DISCORD_CLIENT_ID` | Discord ise | OAuth2 başlatma ve token değişimi. |
+| `DISCORD_CLIENT_SECRET` | Discord ise | Yalnızca Edge'de token değişimi. |
+| `DISCORD_REDIRECT_URI` | Discord ise | Callback adresi; [discord-oauth.md](discord-oauth.md) ile aynı olmalı. |
+| `DISCORD_BOT_TOKEN` | DM ise | `discord-notify` DM gönderimi; yalnızca Edge'de. |
+
+Örnek (değerler placeholder'dır):
+
+```bash
+supabase login
+supabase link --project-ref <PROJE-REFERANSI>
+supabase secrets set \
+  SUPABASE_URL=https://sizin-projeniz.supabase.co \
+  SUPABASE_SERVICE_ROLE_KEY=<servis-anahtari> \
+  SESSION_SECRET=<uzun-rastgele-deger> \
+  RATE_LIMIT_SALT=<baska-bir-rastgele-deger> \
+  ALLOWED_ORIGINS=https://KULLANICI.github.io,http://localhost:5173
+```
+
+Discord kullanacaksanız aynı komuta `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `DISCORD_REDIRECT_URI`, `DISCORD_BOT_TOKEN` değerlerini de ekleyin. `supabase secrets list` yalnızca anahtar adlarını gösterir; değerleri göstermez. Gizli anahtarları bir kez daha görmeniz gerekirse Supabase Dashboard → Project Settings → Edge Functions → Secrets kullanın.
+
+## 6. Edge Functions uçlarını dağıt
+
+On uç vardır; hepsi özel oturum çerezi kullandığı için `--no-verify-jwt` ile dağıtılır (kimlik doğrulama fonksiyonun içinde yapılır).
+
+```bash
+for fn in admin-auth admin-applications admin-questions admin-positions \
+          admin-scores admin-settings public-status submit-application \
+          discord-oauth discord-notify; do
+  supabase functions deploy "$fn" --no-verify-jwt
+done
+```
+
+Windows PowerShell:
+
+```powershell
+$ucLar = @('admin-auth','admin-applications','admin-questions','admin-positions',
+           'admin-scores','admin-settings','public-status','submit-application',
+           'discord-oauth','discord-notify')
+foreach ($uc in $ucLar) { supabase functions deploy $uc --no-verify-jwt }
+```
+
+Her uç için amaç, eylem adları, istek/yanıt örnekleri ve log ipuçları: [edge-functions.md](edge-functions.md).
+
+## 7. Discord kurulumu (opsiyonel)
+
+Discord uygulaması oluşturma, OAuth2 yönlendirme URL'si, bot ve izinler için [discord-oauth.md](discord-oauth.md) belgesini izleyin. Özetle: callback adresi `<SUPABASE_URL>/functions/v1/discord-oauth?action=callback` olmalı, `DISCORD_REDIRECT_URI` birebir aynı değeri taşımalı, bot belirteci yalnızca Edge ortamında tutulmalıdır. Bu adım atlanırsa başvuru ve yönetim akışı çalışmaya devam eder; yalnızca Discord bağlama/DM özellikleri devre dışı kalır (`discord_enabled=false`).
+
+## 8. Yerelde çalıştır
+
+```bash
+npm ci
+npm run dev        # http://localhost:5173
+```
+
+Diğer komutlar:
+
+```bash
+npm test           # Vitest: saf yardımcılar, SQL/Edge/public/docs kontrolleri
+npm run typecheck  # TypeScript denetimi
+npm run build      # tsc -b && vite build → dist/
+```
+
+## 9. Doğrulama kontrol listesi
+
+- [ ] SQL Editor'da dört göç dosyası hatasız uygulandı; `positions=2`, `questions=13`, ölçüt ağırlık toplamı `100`.
+- [ ] `.env` gerçek proje URL/anon anahtarını içeriyor, `service_role` içermiyor.
+- [ ] `node scripts/create-first-admin.mjs` başarılı; `admins` tablosunda 1 kayıt var.
+- [ ] `supabase secrets list` gerekli anahtar adlarını gösteriyor.
+- [ ] 10 uç `--no-verify-jwt` ile dağıtıldı; Dashboard → Edge Functions → Logs'ta hata yok.
+- [ ] `/apply/rehber` sayfası veritabanından gelen soruları gösteriyor.
+- [ ] Form gönderildiğinde `tracking_no` ve `query_token` dönyor; `/status` ile durum sorgulanabiliyor.
+- [ ] `/admin` adresinde CLI'da belirlediğiniz kullanıcı adı/parola ile giriş yapılabiliyor.
+- [ ] Yönetim panelinden bir soru/ayar değiştirilip kaydedildiğinde değişiklik geri okunuyor.
+- [ ] Discord etkinse: bağlama akışı tamamlanıyor, karar sonrası DM gidiyor; DM kapalıysa `failed` görülüp panelden yeniden denenebiliyor.
+- [ ] `npm test` yeşil.
+
+## Sorun giderme
+
+| Belirti | Olası sebep | Çözüm |
+| --- | --- | --- |
+| `Sistem yapılandırılmadı` mesajı, boş soru listesi | `.env` eksik/yanlış veya dev sunucusu yeniden başlatılmadı | `.env` değerlerini kontrol edip `npm run dev` yeniden başlatın. |
+| Edge yanıtı `configuration` (503) | `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` tanımlı değil | `supabase secrets set` ile yeniden ayarlayıp uçları yeniden dağıtın. |
+| Girişte `Oturum sistemi yapılandırılmamış` | `SESSION_SECRET` yok | Edge secret olarak ekleyin; oturum çerezi eskisi geçersiz olur, tekrar giriş yapın. |
+| Başvuru `429 too_fast` | Form 3 saniyeden kısa sürede gönderildi | Formu dikkatlice doldurup tekrar deneyin; bu bir hata değil, bot önlemidir. |
+| Başvuru `429 rate_limit` | IP başına saatlik sınır (varsayılan 5) doldu | Bir saat bekleyin veya `app_settings.rate_limit_per_ip_per_hour` değerini yönetim panelinden güncelleyin. |
+| CORS hatası (tarayıcı konsolunda) | `ALLOWED_ORIGINS` üretim adresini içermiyor | Origin'i virgülle ayrılmış listeye ekleyip uçları yeniden dağıtın; joker `*` kullanmayın. |
+| `İlk yönetici zaten oluşturulmuş` | `admins` tablosu dolu | Mevcut hesapla giriş yapın; değiştirme gerekiyorsa CLI'daki onay ifadesiyle `ALLOW_REPLACE_ADMIN=1` kullanın. |
+| `42703 / PGRST204` kolom hatası | Göç sırası atlandı veya şema sürümü eski | 0001→0004 sırasıyla yeniden uygulayın; uçlar bazı kolom varyantlarını tolere etse de şema tam olmalıdır. |
+| Discord callback `invalid_state` | `DISCORD_REDIRECT_URI` farklı, cookie veya state süresi (10 dk) doldu | Yönlendirme URL'sini birebir eşitleyip akışı baştan başlatın. |
+| DM `failed` | Kullanıcı DM'leri kapalı veya bot token yok | Kullanıcı ayarını açın, `DISCORD_BOT_TOKEN` secret'ını kontrol edin, panelden **Yeniden Dene** yapın. |
+| GitHub Pages 404 / boş sayfa | `VITE_BASE_PATH` yanlış veya Pages kaynağı yanlış | [github-pages.md](github-pages.md) belgesindeki dağıtım kontrol listesini izleyin. |

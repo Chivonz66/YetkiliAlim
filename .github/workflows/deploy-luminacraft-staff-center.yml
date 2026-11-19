@@ -1,0 +1,78 @@
+name: Luminacraft Staff Center — GitHub Pages Dağıtımı / Deploy
+
+# Yalnızca uygulama veya bu iş akışı değiştiğinde çalışır. Ücretli domain gerekmez.
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - 'LuminacraftStaffCenter/**'
+      - '.github/workflows/deploy-luminacraft-staff-center.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Derle ve test et / Build and test
+    runs-on: ubuntu-latest
+    # Proje sitesi alt dizininde yayınlandığı için Vite taban yolu depo adıdır.
+    # Örn. https://KULLANICI.github.io/DEPO-ADI/  ->  /DEPO-ADI/
+    env:
+      VITE_BASE_PATH: /${{ github.event.repository.name }}/
+    steps:
+      - name: Depoyu al / Checkout
+        uses: actions/checkout@v4
+
+      - name: Node.js 20 kur / Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'LuminacraftStaffCenter/package-lock.json'
+
+      - name: Bağımlılıkları yükle / npm ci
+        working-directory: LuminacraftStaffCenter
+        run: npm ci
+
+      - name: Testleri çalıştır / npm test
+        working-directory: LuminacraftStaffCenter
+        run: npm test
+
+      - name: Üretim derlemesi / npm run build
+        working-directory: LuminacraftStaffCenter
+        run: npm run build
+
+      - name: 404.html güvenli kopyası / SPA fallback
+        # Vite, public/404.html dosyasını zaten dist/ klasörüne kopyalar.
+        # Yalnızca o dosya yoksa index.html'i yedek olarak kopyalayın; böylece
+        # public/404.html içindeki kodlama betiği dağıtımda korunur.
+        working-directory: LuminacraftStaffCenter
+        run: node -e "const f=require('fs');if(!f.existsSync('dist/404.html')){f.copyFileSync('dist/index.html','dist/404.html')}"
+
+      - name: Pages yapılandırması / Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Pages artefaktını yükle / Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: LuminacraftStaffCenter/dist
+
+  deploy:
+    name: GitHub Pages'e yayınla / Deploy
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Dağıt / Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
