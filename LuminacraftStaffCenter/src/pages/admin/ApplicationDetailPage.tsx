@@ -141,16 +141,20 @@ export default function ApplicationDetailPage() {
 
   const handleNotification = async () => {
     if (!detail) return
-    const lastFailed = notifications.find((item) => item.status === 'failed') ?? notifications[0]
+    // Yalnızca gerçekten başarısız bildirimler yeniden gönderilebilir; bekleyen/gönderilen
+    // bir kaydı retry etmek Edge Function tarafından invalid_state ile reddedilir.
+    const failedNotifications = notifications.filter((item) => item.status === 'failed')
+    const lastFailed = failedNotifications[0]
+    const isRetry = Boolean(lastFailed)
     setSendingNotification(true)
     try {
-      const result = lastFailed?.id
+      const result = lastFailed
         ? await retryNotification(lastFailed.id)
         : await sendNotification(detail.application.id)
       if (result.notification_status === 'failed' && result.error) {
         notify(result.error, 'error')
       } else {
-        notify('Discord bildirimi gönderildi.', 'success')
+        notify(isRetry ? 'Bildirim yeniden gönderildi.' : 'Bildirim gönderildi.', 'success')
       }
       reload()
     } catch (caught) {

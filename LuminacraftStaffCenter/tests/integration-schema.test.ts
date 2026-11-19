@@ -230,6 +230,42 @@ describe('paylaşılan tipler ve yönetici arayüzü', () => {
   })
 })
 
+describe('Discord bildirimi yeniden gönderimi', () => {
+  const detayKodu = (): string => kod('src/pages/admin/ApplicationDetailPage.tsx')
+
+  /** handleNotification gövdesini metin olarak ayıklar. */
+  const gonderimKodu = (): string => {
+    const kaynak = detayKodu()
+    const baslangic = kaynak.indexOf('const handleNotification = async () => {')
+    expect(baslangic, 'handleNotification bulunamadı').toBeGreaterThanOrEqual(0)
+    const bitis = kaynak.indexOf('\n  if (loading)', baslangic)
+    expect(bitis, 'handleNotification sonu bulunamadı').toBeGreaterThan(baslangic)
+    return kaynak.slice(baslangic, bitis)
+  }
+
+  it('bekleyen veya gönderilen bildirimi retry için yedek olarak kullanmaz', () => {
+    const kaynak = detayKodu()
+    expect(kaynak).not.toContain('?? notifications[0]')
+    expect(kaynak).toContain("status === 'failed'")
+    expect(kaynak).toContain('failedNotifications')
+  })
+
+  it('başarısız bildirim varsa retry, yoksa ilk gönderimi çağırır', () => {
+    const handler = gonderimKodu()
+    expect(handler).toContain('retryNotification(')
+    expect(handler).toContain('sendNotification(')
+    expect(handler).toMatch(/lastFailed\s*\?\s*await retryNotification\(/)
+    expect(handler).toMatch(/:\s*await sendNotification\(/)
+  })
+
+  it('yeniden gönderim ve ilk gönderim için doğru Türkçe sonuç mesajları üretir', () => {
+    const handler = gonderimKodu()
+    expect(handler).toContain('Bildirim yeniden gönderildi.')
+    expect(handler).toContain('Bildirim gönderildi.')
+    expect(handler).toContain('isRetry ?')
+  })
+})
+
 it('SQL şeması kaynak metin olarak doğrulanır; canlı bağlantı gerekmez', () => {
   const sema = oku('supabase/migrations/0001_initial_schema.sql')
   const guvenlik = oku('supabase/migrations/0002_rls_policies.sql')
