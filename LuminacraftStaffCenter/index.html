@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0b0f14" />
+    <meta
+      name="description"
+      content="Luminacraft Staff Center — başvuru, başvuru takibi ve personel yönetimi için merkezi panel."
+    />
+    <title>Luminacraft Staff Center</title>
+    <script>
+      // GitHub Pages SPA yönlendirme şeması:
+      // public/404.html, istenen yolu encodeURIComponent(path) ile kodlar ve
+      // "/?/kodlanmis-yol" adresine yönlendirir. Burada location.search içindeki
+      // "?..." bölümü decodeURIComponent ile çözülüp history.replaceState ile
+      // gerçek istemci tarafı rotasına yazılır. 404.html ile aynı şema kullanılmalıdır.
+      (function () {
+        var search = window.location.search
+        if (search.indexOf('?/') === 0) {
+          var path = decodeURIComponent(search.slice(1))
+          window.history.replaceState(null, '', path + window.location.hash)
+        }
+      })()
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

@@ -1,0 +1,145 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+  --lsc-bg: #07090c;
+  --lsc-surface: #10161d;
+  --lsc-surface-raised: #151d26;
+  --lsc-border: #2a3745;
+  --lsc-text: #e8f1f3;
+  --lsc-muted: #8fa3ae;
+  --lsc-accent: #34e0a1;
+  --lsc-accent-cyan: #4fd8e8;
+  --lsc-danger: #f87171;
+}
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    min-height: 100%;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background-color: var(--lsc-bg);
+    color: var(--lsc-text);
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1,
+  h2,
+  h3 {
+    letter-spacing: -0.02em;
+  }
+
+  ::selection {
+    background: rgba(52, 224, 161, 0.3);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--lsc-accent);
+    outline-offset: 2px;
+  }
+
+  input,
+  select,
+  textarea,
+  button {
+    font: inherit;
+  }
+}
+
+@layer components {
+  .panel {
+    @apply rounded-xl border border-white/5 bg-obsidian-850/90 shadow-xl shadow-black/30 backdrop-blur;
+    border-color: color-mix(in srgb, var(--lsc-border) 60%, transparent);
+  }
+
+  .glow-border {
+    position: relative;
+  }
+
+  .glow-border::after {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    pointer-events: none;
+    box-shadow: 0 0 22px -6px rgba(52, 224, 161, 0.55);
+    transition: opacity 0.25s ease;
+    opacity: 0.65;
+  }
+
+  .glow-border:hover::after,
+  .glow-border:focus-within::after {
+    opacity: 1;
+  }
+
+  /* Dış görsel gerektirmeyen piksel/blok dokusu. */
+  .pixel-grid {
+    background-color: var(--lsc-bg);
+    background-image:
+      linear-gradient(rgba(52, 224, 161, 0.045) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(79, 216, 232, 0.045) 1px, transparent 1px),
+      radial-gradient(circle at 18% 12%, rgba(52, 224, 161, 0.12), transparent 38%),
+      radial-gradient(circle at 82% 8%, rgba(79, 216, 232, 0.1), transparent 34%);
+    background-size: 28px 28px, 28px 28px, 100% 100%, 100% 100%;
+    background-position: -1px -1px, -1px -1px, center, center;
+  }
+
+  .btn-minecraft {
+    @apply inline-flex items-center justify-center gap-2 rounded-md border px-4 py-2 text-sm font-semibold transition-all duration-200;
+    border-color: color-mix(in srgb, var(--lsc-accent) 45%, transparent);
+    background: linear-gradient(180deg, rgba(52, 224, 161, 0.22), rgba(52, 224, 161, 0.08));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 3px 0 rgba(4, 30, 22, 0.85);
+  }
+
+  .btn-minecraft:hover:not(:disabled) {
+    background: linear-gradient(180deg, rgba(52, 224, 161, 0.32), rgba(52, 224, 161, 0.14));
+    transform: translateY(-1px);
+  }
+
+  .btn-minecraft:active:not(:disabled) {
+    transform: translateY(2px);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 1px 0 rgba(4, 30, 22, 0.85);
+  }
+}
+
+@keyframes lsc-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-up {
+  animation: lsc-fade-up 0.4s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .panel {
+    @apply rounded-lg;
+  }
+}
