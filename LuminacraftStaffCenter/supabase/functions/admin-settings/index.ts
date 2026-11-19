@@ -51,10 +51,10 @@ async function run(req: Request): Promise<Response> {
     if (entries.length === 0) return error('Güncellenecek ayar belirtilmeli.', 400, 'validation')
 
     for (const [key, value] of entries) {
+      // app_settings.value bir jsonb sütunudur; değer dönüştürülmeden saklanır.
       const row: Record<string, unknown> = {
         key,
-        value: value === null || value === undefined ? null : String(value),
-        updated_by: auth.adminId,
+        value: value ?? null,
         updated_at: new Date().toISOString(),
       }
       const upsert = await client.from('app_settings').upsert(row, { onConflict: 'key' })

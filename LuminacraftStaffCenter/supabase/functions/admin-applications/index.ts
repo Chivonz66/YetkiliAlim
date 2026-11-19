@@ -56,13 +56,13 @@ async function run(req: Request): Promise<Response> {
       const search = safeSearch(url.searchParams.get('search') ?? '')
       if (search) {
         query = query.or(
-          `tracking_no.ilike.%${search}%,applicant_name.ilike.%${search}%,applicant_email.ilike.%${search}%`,
+          `tracking_no.ilike.%${search}%,applicant_minecraft_username.ilike.%${search}%,applicant_discord_username.ilike.%${search}%`,
         )
       }
       const limit = Math.min(200, Math.max(1, Number.parseInt(url.searchParams.get('limit') ?? '50', 10) || 50))
       const offset = Math.max(0, Number.parseInt(url.searchParams.get('offset') ?? '0', 10) || 0)
       const result = await query
-        .order('created_at', { ascending: false })
+        .order('submitted_at', { ascending: false })
         .range(offset, offset + limit - 1)
       if (result.error) return error(defaultMessage(500), 500, 'database')
       return json({
@@ -91,22 +91,14 @@ async function run(req: Request): Promise<Response> {
       if (current.error) return error(defaultMessage(500), 500, 'database')
       if (!current.data) return error(defaultMessage(404), 404, 'not_found')
 
-      if (current.data.status !== checked.data.status) {
-        const historyInsert = await client.from('application_history').insert({
-          application_id: id,
-          from_status: current.data.status,
-          to_status: checked.data.status,
-          changed_by: auth.adminId,
-          note: checked.data.note ?? null,
-        })
-        if (historyInsert.error) return error(defaultMessage(500), 500, 'database')
-      }
-
+      // Durum geçmişi ve denetim kaydı, 0003'teki tetikleyici tarafından
+      // otomatik yazılır; burada elle application_history eklemesi yapılmaz.
       const updated = await client
         .from('applications')
         .update({
           status: checked.data.status,
-          reviewed_at: new Date().toISOString(),
+          decided_at: new Date().toISOString(),
+          decided_by: auth.adminId,
         })
         .eq('id', id)
         .select('*')
@@ -115,13 +107,20 @@ async function run(req: Request): Promise<Response> {
 
       let notificationStatus: 'pending' | 'skipped' = 'skipped'
       if (['accepted', 'rejected'].includes(checked.data.status)) {
+        const linked = await client
+          .from('discord_links')
+          .select('discord_user_id')
+          .eq('application_id', id)
+          .maybeSingle()
         const queued = await client.from('notification_queue').insert({
           application_id: id,
-          channel: 'discord',
+          discord_user_id: linked.data?.discord_user_id ?? null,
+          kind: 'discord',
           status: 'pending',
           payload: {
             tracking_no: current.data.tracking_no,
             status: checked.data.status,
+            ...(checked.data.note ? { note: checked.data.note } : {}),
           },
         })
         if (queued.error) return error(defaultMessage(500), 500, 'database')

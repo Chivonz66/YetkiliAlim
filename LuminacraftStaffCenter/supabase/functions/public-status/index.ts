@@ -1,21 +1,21 @@
 // Başvuru sorgulama: yalnızca SECURITY DEFINER RPC üzerinden güvenli alanlar döner.
 import { preflight, withCors } from '../_shared/cors.ts'
 import { getAdminClient } from '../_shared/db.ts'
-import { sha256Hex } from '../_shared/pure.ts'
 import { defaultMessage, error, json } from '../_shared/responses.ts'
 import { readJson, validate } from '../_shared/validation.ts'
 
 type StatusData = { tracking_no: string; query_token: string }
 
-// Notlar, puanlar ve başvuran iletişim bilgileri asla döndürülmez.
+// lookup_application(text, text) yalnızca bu alanları döndürür (0002).
+// Notlar, puanlar, ham sorgu anahtarı ve iletişim bilgileri asla yer almaz.
 const SAFE_FIELDS = [
   'tracking_no',
-  'status',
   'position_slug',
+  'status',
   'submitted_at',
-  'reviewed_at',
-  'created_at',
-  'updated_at',
+  'decided_at',
+  'notification_status',
+  'status_history',
 ] as const
 
 async function run(req: Request): Promise<Response> {
@@ -27,26 +27,14 @@ async function run(req: Request): Promise<Response> {
 
   const db = await getAdminClient()
   if (!db.ok) return error(db.error, 503, 'configuration')
-  const tokenHash = sha256Hex(checked.data.query_token)
 
   let result: any = null
   try {
+    // Fonksiyon ham sorgu anahtarını kendisi sha256 ile doğrular (0002).
     result = await db.client.rpc('lookup_application', {
       p_tracking_no: checked.data.tracking_no,
-      p_query_token_hash: tokenHash,
+      p_query_token: checked.data.query_token,
     })
-    if (result.error) {
-      result = await db.client.rpc('lookup_application', {
-        tracking_no: checked.data.tracking_no,
-        query_token_hash: tokenHash,
-      })
-    }
-    if (result.error) {
-      result = await db.client.rpc('lookup_application', {
-        p_tracking_no: checked.data.tracking_no,
-        p_token_hash: tokenHash,
-      })
-    }
   } catch {
     return error(defaultMessage(500), 500, 'database')
   }
@@ -61,6 +49,8 @@ async function run(req: Request): Promise<Response> {
   for (const field of SAFE_FIELDS) {
     if (row[field] !== undefined && row[field] !== null) safe[field] = row[field]
   }
+  // Genel istemci sözleşmesindeki `decision_date` karşılığı şemadaki `decided_at`'tır.
+  if (safe.decided_at !== undefined) safe.decision_date = safe.decided_at
   return json({ ok: true, application: safe })
 }
 

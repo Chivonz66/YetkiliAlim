@@ -7,9 +7,13 @@ import { readJson, validate } from '../_shared/validation.ts'
 
 type PositionBody = Record<string, any>
 
-function isMissingColumn(dbError: any): boolean {
-  const code = String(dbError?.code ?? '')
-  return code === '42703' || code === 'PGRST204'
+/**
+ * positions şemasında `is_open` sütunu yoktur; başvuru açıklığı app_settings
+ * üzerinden yönetilir. Yazmalarda yalnızca gerçek sütunlar bırakılır.
+ */
+function toDbFields(fields: Record<string, any>): Record<string, any> {
+  const { is_open: _ignored, ...rest } = fields
+  return rest
 }
 
 async function run(req: Request): Promise<Response> {
@@ -35,11 +39,11 @@ async function run(req: Request): Promise<Response> {
     if (method === 'POST') {
       const checked = await validate<PositionBody>('position', body)
       if (!checked.ok) return error(checked.error, 400, 'validation')
-      let inserted = await client.from('positions').insert(checked.data).select('*').single()
-      if (inserted.error && isMissingColumn(inserted.error)) {
-        const { is_open: _ignored, ...rest } = checked.data
-        inserted = await client.from('positions').insert(rest).select('*').single()
-      }
+      const inserted = await client
+        .from('positions')
+        .insert(toDbFields(checked.data))
+        .select('*')
+        .single()
       if (inserted.error || !inserted.data) return error(defaultMessage(500), 500, 'database')
       await writeAudit(client, auth.adminId, 'position_create', 'positions', inserted.data.id, {})
       return json({ ok: true, position: inserted.data }, 201)
@@ -51,11 +55,12 @@ async function run(req: Request): Promise<Response> {
       const checked = await validate<PositionBody>('positionPatch', body)
       if (!checked.ok) return error(checked.error, 400, 'validation')
       const { id: _bodyId, ...fields } = checked.data
-      let updated = await client.from('positions').update(fields).eq('id', id).select('*').maybeSingle()
-      if (updated.error && isMissingColumn(updated.error)) {
-        const { is_open: _ignored, ...rest } = fields
-        updated = await client.from('positions').update(rest).eq('id', id).select('*').maybeSingle()
-      }
+      const updated = await client
+        .from('positions')
+        .update(toDbFields(fields))
+        .eq('id', id)
+        .select('*')
+        .maybeSingle()
       if (updated.error) return error(defaultMessage(500), 500, 'database')
       if (!updated.data) return error(defaultMessage(404), 404, 'not_found')
       await writeAudit(client, auth.adminId, 'position_update', 'positions', id, {

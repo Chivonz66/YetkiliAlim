@@ -1,5 +1,6 @@
-import { useEffect, useState, type ComponentType } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import type { LucideIcon } from 'lucide-react'
 import {
   ArrowRight,
   ArrowUpRight,
@@ -90,7 +91,7 @@ function LogoMark({ className = '' }: { className?: string }) {
   )
 }
 
-const POSITION_ICONS: Record<PositionSlug, ComponentType<{ size?: number; className?: string }>> = {
+const POSITION_ICONS: Record<PositionSlug, LucideIcon> = {
   rehber: Compass,
   aac: ShieldCheck,
 }

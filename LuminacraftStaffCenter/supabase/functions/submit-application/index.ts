@@ -4,6 +4,7 @@ import { getAdminClient } from '../_shared/db.ts'
 import {
   bytesToHex,
   createTrackingNo,
+  dailyActivityToHours,
   env,
   hashIp,
   isHumanSubmission,
@@ -15,12 +16,14 @@ import { readJson, validate } from '../_shared/validation.ts'
 type AnswerValue = string | number | boolean | string[]
 type ApplicationData = {
   position_slug: 'rehber' | 'aac'
-  applicant_name: string
-  applicant_email: string
-  discord_username: string
+  applicant_minecraft_username: string
+  applicant_discord_username: string
   age: number
-  hours_per_week: number
-  answers: Record<string, AnswerValue> | Array<{ question_id: string; answer: AnswerValue }>
+  daily_hours: number
+  minecraft_experience?: string | null
+  staff_experience?: string | null
+  self_introduction?: string | null
+  answers: Record<string, AnswerValue> | Array<{ question_id: string; value: AnswerValue }>
   website?: string | null
   elapsed_ms: number
 }
@@ -28,7 +31,7 @@ type ApplicationData = {
 type Question = {
   id: string
   question_text: string
-  type: string
+  question_type: string
   is_required: boolean
   min_length?: number | null
   max_length?: number | null
@@ -51,19 +54,6 @@ function randomBytes(length: number): Uint8Array {
   return bytes
 }
 
-function isMissingColumn(dbError: any): boolean {
-  const code = String(dbError?.code ?? '')
-  const message = String(dbError?.message ?? '')
-  return code === '42703' || code === 'PGRST204' || /column .* does not exist/i.test(message)
-}
-
-function windowDate(value: unknown): Date {
-  if (typeof value === 'number') {
-    return new Date(value < 1e12 ? value * 1000 : value)
-  }
-  return new Date(String(value))
-}
-
 async function readSetting(client: any, key: string, fallback: string): Promise<string> {
   try {
     const { data, error: dbError } = await client
@@ -79,32 +69,80 @@ async function readSetting(client: any, key: string, fallback: string): Promise<
   }
 }
 
-/** `rate_limits` tablosunda 1 saatlik pencereyi atomik olmayan şekilde günceller. */
+/** rate_limits tablosunda saatlik pencereyi (key, window_start, hit_count) günceller. */
 async function enforceRateLimit(client: any, key: string, limit: number): Promise<boolean> {
-  const now = new Date()
-  const windowStartMs = now.getTime() - 60 * 60 * 1000
-  let column = 'window_start'
-  let result = await client.from('rate_limits').select('count, window_start').eq('key', key).maybeSingle()
-  if (result.error && isMissingColumn(result.error)) {
-    column = 'created_at'
-    result = await client.from('rate_limits').select('count, created_at').eq('key', key).maybeSingle()
-  }
-  if (result.error) return false
+  const windowStart = new Date()
+  windowStart.setUTCMinutes(0, 0, 0)
+  const at = windowStart.toISOString()
 
-  const row = result.data as Record<string, unknown> | null
-  const startedAt = row ? windowDate(row[column]).getTime() : Number.NaN
-  if (row && Number.isFinite(startedAt) && startedAt > windowStartMs) {
-    const count = Number(row.count ?? 0)
-    if (count >= limit) return false
-    const updated = await client.from('rate_limits').update({ count: count + 1 }).eq('key', key)
-    if (updated.error) return false
-    return true
+  const existing = await client
+    .from('rate_limits')
+    .select('hit_count, window_start')
+    .eq('key', key)
+    .eq('window_start', at)
+    .maybeSingle()
+  if (existing.error) return false
+
+  const count = Number(existing.data?.hit_count ?? 0)
+  if (existing.data && Number.isFinite(count) && count >= limit) return false
+  if (existing.data) {
+    const updated = await client
+      .from('rate_limits')
+      .update({ hit_count: count + 1 })
+      .eq('key', key)
+      .eq('window_start', at)
+    return !updated.error
   }
   const upsert = await client
     .from('rate_limits')
-    .upsert({ key, count: 1, [column]: now.toISOString() }, { onConflict: 'key' })
-  if (upsert.error) return false
-  return true
+    .upsert({ key, window_start: at, hit_count: 1 }, { onConflict: 'key,window_start' })
+  return !upsert.error
+}
+
+function textOrNull(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  return trimmed ? trimmed.slice(0, 4000) : null
+}
+
+/**
+ * Genel formun iç içe `applicant` gövdesini doğrulama şemasının beklediği
+ * düz, şema adlarıyla eşleşen yapıya çevirir. Eski düz gövde de kabul edilir.
+ */
+function normalizeSubmission(raw: Record<string, unknown>): Record<string, unknown> {
+  const applicant =
+    raw.applicant && typeof raw.applicant === 'object'
+      ? (raw.applicant as Record<string, unknown>)
+      : {}
+  const minecraft = String(
+    applicant.minecraft_username ?? raw.applicant_minecraft_username ?? raw.applicant_name ?? '',
+  ).trim()
+  const discordRaw = String(
+    applicant.discord_username ?? raw.applicant_discord_username ?? raw.discord_username ?? '',
+  ).trim()
+  // Şema applicant_discord_username alanını NOT NULL ve en az 3 karakterli zorunlu kılar.
+  const discord = /^[A-Za-z0-9_.]{3,32}$/.test(discordRaw) ? discordRaw : minecraft
+  const ageRaw = applicant.age ?? raw.age
+  const hoursRaw =
+    applicant.daily_hours ?? raw.daily_hours ?? applicant.hours_per_week ?? raw.hours_per_week
+  const hours =
+    hoursRaw === undefined || hoursRaw === null
+      ? dailyActivityToHours(applicant.daily_activity ?? raw.daily_activity)
+      : Number(hoursRaw)
+  const age = typeof ageRaw === 'string' ? Number(ageRaw) : ageRaw
+  return {
+    position_slug: raw.position_slug,
+    applicant_minecraft_username: minecraft,
+    applicant_discord_username: discord,
+    age: typeof age === 'number' && Number.isFinite(age) ? age : -1,
+    daily_hours: typeof hours === 'number' && Number.isFinite(hours) ? hours : -1,
+    minecraft_experience: textOrNull(applicant.minecraft_experience ?? raw.minecraft_experience),
+    staff_experience: textOrNull(applicant.staff_experience ?? raw.staff_experience),
+    self_introduction: textOrNull(applicant.self_introduction ?? raw.self_introduction),
+    answers: raw.answers ?? {},
+    website: raw.website ?? '',
+    elapsed_ms: typeof raw.elapsed_ms === 'string' ? Number(raw.elapsed_ms) : raw.elapsed_ms,
+  }
 }
 
 function normalizeAnswers(
@@ -112,7 +150,7 @@ function normalizeAnswers(
 ): Record<string, AnswerValue> {
   if (Array.isArray(answers)) {
     const result: Record<string, AnswerValue> = {}
-    for (const entry of answers) result[entry.question_id] = entry.answer
+    for (const entry of answers) result[entry.question_id] = entry.value
     return result
   }
   return answers
@@ -130,7 +168,7 @@ function isEmptyAnswer(value: AnswerValue | undefined): boolean {
 function answerValid(question: Question, answer: AnswerValue | undefined, options: Option[]): boolean {
   if (isEmptyAnswer(answer)) return !question.is_required
   const values = options.map((option) => option.value)
-  switch (question.type) {
+  switch (question.question_type) {
     case 'short_text':
     case 'long_text': {
       if (typeof answer !== 'string') return false
@@ -169,7 +207,8 @@ async function run(req: Request): Promise<Response> {
 
   const parsed = await readJson(req)
   if (!parsed.ok) return error(parsed.error, 400, 'invalid_body')
-  const checked = await validate<ApplicationData>('application', parsed.data)
+  const normalized = normalizeSubmission(parsed.data as Record<string, unknown>)
+  const checked = await validate<ApplicationData>('application', normalized)
   if (!checked.ok) return error(checked.error, 400, 'validation')
   const data = checked.data
 
@@ -195,7 +234,8 @@ async function run(req: Request): Promise<Response> {
   const rateLimit = Math.max(1, Number.parseInt(rateLimitRaw, 10) || 5)
   const forwarded = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
   const ip = forwarded || req.headers.get('x-real-ip')?.trim() || 'unknown'
-  const ipKey = `ip:${hashIp(ip, env('RATE_LIMIT_SALT') ?? '')}`
+  const ipSalt = env('RATE_LIMIT_SALT') ?? ''
+  const ipKey = `ip:${hashIp(ip, ipSalt)}`
   const allowed = await enforceRateLimit(client, ipKey, rateLimit)
   if (!allowed) {
     return error('Çok fazla başvuru gönderdiniz. Lütfen bir saat sonra tekrar deneyin.', 429, 'rate_limit')
@@ -236,64 +276,51 @@ async function run(req: Request): Promise<Response> {
   const queryToken = bytesToHex(randomBytes(32))
   const tokenHash = sha256Hex(queryToken)
   const submittedAt = new Date().toISOString()
-  const coreRow = {
+  // Yalnızca 0001 şemasında bulunan sütunlar yazılır; ham sorgu anahtarı saklanmaz.
+  const applicationRow = {
     tracking_no: trackingNo,
+    query_token_hash: tokenHash,
     position_slug: data.position_slug,
     status: 'pending',
-    applicant_name: data.applicant_name,
-    applicant_email: data.applicant_email,
-    discord_username: data.discord_username,
+    applicant_minecraft_username: data.applicant_minecraft_username,
+    applicant_discord_username: data.applicant_discord_username,
+    discord_connected: false,
+    age: data.age,
+    daily_hours: data.daily_hours,
+    minecraft_experience: data.minecraft_experience ?? null,
+    staff_experience: data.staff_experience ?? null,
+    self_introduction: data.self_introduction ?? null,
     submitted_at: submittedAt,
+    source_ip_hash: hashIp(ip, ipSalt),
   }
-
-  // Şema uyumluluğu için yaş/saat ve belirteç sütun adlarının olası varyantları.
-  const insertVariants = [
-    { ...coreRow, age: data.age, hours_per_week: data.hours_per_week, query_token_hash: tokenHash },
-    { ...coreRow, age: data.age, hours_per_week: data.hours_per_week, query_token: tokenHash },
-    { ...coreRow, query_token_hash: tokenHash },
-    { ...coreRow, query_token: tokenHash },
-  ]
-  let inserted: any = null
-  for (const row of insertVariants) {
-    inserted = await client.from('applications').insert(row).select('id, tracking_no').single()
-    if (!inserted.error || !isMissingColumn(inserted.error)) break
-  }
+  const inserted = await client
+    .from('applications')
+    .insert(applicationRow)
+    .select('id, tracking_no')
+    .single()
   if (inserted.error || !inserted.data) return error(defaultMessage(500), 500, 'database')
 
   const applicationId = inserted.data.id as string
   const answerRows = questions
     .filter((question) => !isEmptyAnswer(submitted[question.id]))
     .map((question) => {
-      const value = submitted[question.id]
       const options = optionsByQuestion.get(question.id) ?? []
       return {
         application_id: applicationId,
         question_id: question.id,
         question_text: question.question_text,
-        question_type: question.type,
+        question_type: question.question_type,
+        position_slug: question.position_slug ?? null,
         options_snapshot: options.map((option) => ({
           label: option.label,
           value: option.value,
           sort_order: option.sort_order ?? 0,
         })),
-        answer_text: typeof value === 'string' ? value : JSON.stringify(value),
-        answer_value: Array.isArray(value) ? value.join(',') : String(value),
+        value: submitted[question.id] ?? null,
       }
     })
   if (answerRows.length > 0) {
-    let answersInsert = await client.from('application_answers').insert(answerRows)
-    if (answersInsert.error && isMissingColumn(answersInsert.error)) {
-      answersInsert = await client
-        .from('application_answers')
-        .insert(
-          answerRows.map((row) => ({
-            application_id: row.application_id,
-            question_id: row.question_id,
-            answer_text: row.answer_text,
-            answer_value: row.answer_value,
-          })),
-        )
-    }
+    const answersInsert = await client.from('application_answers').insert(answerRows)
     if (answersInsert.error) return error(defaultMessage(500), 500, 'database')
   }
 

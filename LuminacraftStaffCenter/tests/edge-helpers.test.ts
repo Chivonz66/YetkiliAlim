@@ -3,7 +3,10 @@ import {
   QUESTION_TYPES,
   SCORE_CRITERIA,
   base64urlDecode,
+  buildAuditRow,
+  canRetryNotification,
   createTrackingNo,
+  dailyActivityToHours,
   decodeSessionPayload,
   encodeSessionPayload,
   getAllowedOrigins,
@@ -195,5 +198,43 @@ describe('başvuru alan doğrulama', () => {
     expect(isHumanSubmission('', 3000)).toBe(true)
     expect(isHumanSubmission('https://spam.example', 5000)).toBe(false)
     expect(isHumanSubmission('', 2999)).toBe(false)
+  })
+})
+
+describe('şema sözleşmesi yardımcıları', () => {
+  it('denetim satırını şema sütun adlarıyla üretir', () => {
+    expect(buildAuditRow('admin-1', 'update_application', 'applications', 'app-1', { status: 'accepted' })).toEqual({
+      actor_type: 'admin',
+      actor_id: 'admin-1',
+      action: 'update_application',
+      target_table: 'applications',
+      target_id: 'app-1',
+      details: { status: 'accepted' },
+    })
+  })
+
+  it('yönetici olmayan denetim satırını sistem olarak işaretler', () => {
+    const row = buildAuditRow(null, 'cleanup', 'system', null)
+    expect(row.actor_type).toBe('system')
+    expect(row.actor_id).toBeNull()
+    expect(row.target_id).toBeNull()
+    expect(row.details).toEqual({})
+  })
+
+  it('yalnızca başarısız bildirimlerin yeniden gönderilmesine izin verir', () => {
+    expect(canRetryNotification('failed')).toBe(true)
+    expect(canRetryNotification('pending')).toBe(false)
+    expect(canRetryNotification('sent')).toBe(false)
+    expect(canRetryNotification(null)).toBe(false)
+  })
+
+  it('günlük aktivite değerlerini daily_hours aralığına eşler', () => {
+    expect(dailyActivityToHours('her_gun')).toBe(6)
+    expect(dailyActivityToHours('haftada_birkaç')).toBe(3)
+    expect(dailyActivityToHours('haftada_bir')).toBe(1)
+    expect(dailyActivityToHours('nadir')).toBe(0.5)
+    expect(dailyActivityToHours(8)).toBe(8)
+    expect(dailyActivityToHours(99)).toBe(24)
+    expect(dailyActivityToHours('geçersiz')).toBe(0)
   })
 })

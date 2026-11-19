@@ -2,7 +2,7 @@
 import { requireAdmin } from '../_shared/auth.ts'
 import { preflight, withCors } from '../_shared/cors.ts'
 import { getAdminClient } from '../_shared/db.ts'
-import { env } from '../_shared/pure.ts'
+import { canRetryNotification, env } from '../_shared/pure.ts'
 import { defaultMessage, error, json } from '../_shared/responses.ts'
 import { readJson, validate } from '../_shared/validation.ts'
 
@@ -54,6 +54,7 @@ async function mark(
   applicationId: string,
   status: 'sent' | 'failed',
   message: string | null,
+  attempts: number = 0,
 ): Promise<void> {
   try {
     if (notificationId) {
@@ -61,7 +62,8 @@ async function mark(
         .from('notification_queue')
         .update({
           status,
-          error_message: message,
+          last_error: message,
+          attempts,
           sent_at: status === 'sent' ? new Date().toISOString() : null,
         })
         .eq('id', notificationId)
@@ -114,21 +116,27 @@ async function run(req: Request): Promise<Response> {
 
   let notificationId: string | null = null
   let applicationId = ''
+  let attempts = 0
   if (dataAction === 'retry') {
     const found = await client
       .from('notification_queue')
-      .select('id, application_id')
+      .select('id, application_id, status, attempts')
       .eq('id', checked.data.notification_id)
       .maybeSingle()
     if (found.error) return error(defaultMessage(500), 500, 'database')
     if (!found.data) return error(defaultMessage(404), 404, 'not_found')
+    // Yalnızca başarısız bildirimler yeniden denenebilir.
+    if (!canRetryNotification(found.data.status)) {
+      return error('Yalnızca başarısız bildirimler yeniden gönderilebilir.', 400, 'invalid_state')
+    }
     notificationId = found.data.id
     applicationId = found.data.application_id
+    attempts = Number(found.data.attempts ?? 0)
   } else {
     applicationId = checked.data.application_id ?? ''
     const existing = await client
       .from('notification_queue')
-      .select('id')
+      .select('id, attempts')
       .eq('application_id', applicationId)
       .eq('status', 'pending')
       .order('created_at', { ascending: false })
@@ -136,10 +144,11 @@ async function run(req: Request): Promise<Response> {
       .maybeSingle()
     if (existing.data?.id) {
       notificationId = existing.data.id
+      attempts = Number(existing.data.attempts ?? 0)
     } else {
       const created = await client
         .from('notification_queue')
-        .insert({ application_id: applicationId, channel: 'discord', status: 'pending', payload: {} })
+        .insert({ application_id: applicationId, kind: 'discord', status: 'pending', payload: {} })
         .select('id')
         .single()
       if (created.error || !created.data) return error(defaultMessage(500), 500, 'database')
@@ -149,24 +158,24 @@ async function run(req: Request): Promise<Response> {
 
   const application = await client
     .from('applications')
-    .select('id, tracking_no, status, discord_id')
+    .select('id, tracking_no, status, discord_user_id')
     .eq('id', applicationId)
     .maybeSingle()
   if (application.error) return error(defaultMessage(500), 500, 'database')
   if (!application.data) return error(defaultMessage(404), 404, 'not_found')
 
-  let recipientId = application.data.discord_id as string | null
+  let recipientId = application.data.discord_user_id as string | null
   if (!recipientId) {
     const linked = await client
       .from('discord_links')
-      .select('discord_id')
+      .select('discord_user_id')
       .eq('application_id', applicationId)
       .maybeSingle()
-    recipientId = linked.data?.discord_id ?? null
+    recipientId = linked.data?.discord_user_id ?? null
   }
   if (!recipientId) {
     const reason = 'Başvuruya bağlı Discord kullanıcısı bulunamadı.'
-    await mark(client, notificationId, applicationId, 'failed', reason)
+    await mark(client, notificationId, applicationId, 'failed', reason, attempts + 1)
     return json({ ok: true, notification_status: 'failed', error: reason, application_id: applicationId })
   }
 
@@ -177,10 +186,10 @@ async function run(req: Request): Promise<Response> {
   )
   if (!result.ok) {
     const reason = result.error ?? 'Discord bildirimi gönderilemedi.'
-    await mark(client, notificationId, applicationId, 'failed', reason)
+    await mark(client, notificationId, applicationId, 'failed', reason, attempts + 1)
     return json({ ok: true, notification_status: 'failed', error: reason, application_id: applicationId })
   }
-  await mark(client, notificationId, applicationId, 'sent', null)
+  await mark(client, notificationId, applicationId, 'sent', null, attempts + 1)
   return json({ ok: true, notification_status: 'sent', application_id: applicationId })
 }
 

@@ -1,6 +1,6 @@
 // Yalnızca Edge Functions içinde kullanılan service_role veritabanı istemcisi.
 // service_role anahtarı hiçbir yanıta veya tarayıcı koduna eklenmez.
-import { env } from './pure.ts'
+import { buildAuditRow, env } from './pure.ts'
 
 export const CONFIG_ERROR =
   'Sunucu yapılandırması eksik: SUPABASE_URL ve SUPABASE_SERVICE_ROLE_KEY tanımlanmalı.'
@@ -56,13 +56,9 @@ export async function writeAudit(
   details: Record<string, unknown> = {},
 ): Promise<void> {
   try {
-    await client.from('audit_logs').insert({
-      action,
-      entity_type: entityType,
-      entity_id: entityId,
-      admin_id: adminId,
-      details,
-    })
+    await client
+      .from('audit_logs')
+      .insert(buildAuditRow(adminId, action, entityType, entityId, details))
   } catch {
     // Denetim kaydı yazılamadı; kullanıcıya iç hata ayrıntısı gösterilmez.
   }
