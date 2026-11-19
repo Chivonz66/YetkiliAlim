@@ -10,13 +10,12 @@ export interface TimelineEntry {
   action?: string | null
   from_status?: ApplicationStatus | string | null
   to_status?: ApplicationStatus | string | null
-  note?: string | null
-  changed_by?: string | null
-  admin_id?: string | null
+  actor?: string | null
   details?: Record<string, unknown> | null
 }
 
 const ACTION_LABELS: Record<string, string> = {
+  status_change: 'Durum güncellendi',
   application_status_change: 'Durum güncellendi',
   question_create: 'Soru eklendi',
   question_update: 'Soru güncellendi',
@@ -40,6 +39,12 @@ function labelFor(entry: TimelineEntry): string {
   }
   if (entry.action) return ACTION_LABELS[entry.action] ?? entry.action
   return 'Kayıt güncellendi'
+}
+
+function detailText(entry: TimelineEntry): string | null {
+  const raw = entry.details?.note
+  if (typeof raw === 'string' && raw.trim()) return raw.trim()
+  return null
 }
 
 export default function AuditTimeline({ entries }: { entries: TimelineEntry[] }) {
@@ -66,10 +71,12 @@ export default function AuditTimeline({ entries }: { entries: TimelineEntry[] })
                 {formatDateTime(entry.created_at)}
               </time>
             </div>
-            {entry.note && <p className="mt-2 text-sm text-slate-400">“{entry.note}”</p>}
-            {(entry.changed_by || entry.admin_id) && (
+            {detailText(entry) && (
+              <p className="mt-2 text-sm text-slate-400">“{detailText(entry)}”</p>
+            )}
+            {entry.actor && (
               <Badge variant="default" className="mt-2 text-[10px]">
-                {String(entry.changed_by ?? entry.admin_id)}
+                {entry.actor}
               </Badge>
             )}
           </div>

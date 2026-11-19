@@ -1,4 +1,6 @@
 // Supabase Postgres şemasını yansıtan ortak tipler (snake_case alan adları).
+// Kaynak: supabase/migrations/0001_initial_schema.sql. Question.type ve
+// Position.is_open yalnızca istemci sözleşmesidir; Edge Functions çevirir.
 
 export type QuestionType =
   | 'short_text'
@@ -10,6 +12,8 @@ export type QuestionType =
   | 'checkbox'
 
 export type ApplicationStatus = 'pending' | 'reviewing' | 'accepted' | 'rejected'
+
+export type ApplicationNotificationStatus = 'none' | 'queued' | 'pending' | 'sent' | 'failed'
 
 export type PositionSlug = 'rehber' | 'aac'
 
@@ -39,6 +43,7 @@ export interface QuestionCategory {
   is_active?: boolean
 }
 
+/** İstemci tarafındaki soru sözleşmesi; veritabanı sütunu `question_type`'tır. */
 export interface Question {
   id: string
   category_id: string | null
@@ -58,6 +63,7 @@ export interface Question {
   updated_at?: string
 }
 
+/** İstemci tarafındaki pozisyon sözleşmesi; `is_open` DB sütunu değildir. */
 export interface Position {
   id: string
   slug: PositionSlug
@@ -69,42 +75,59 @@ export interface Position {
   updated_at?: string
 }
 
+/** applications tablosu. Ham sorgu anahtarı yalnızca hash olarak tutulur. */
 export interface Application {
   id: string
   tracking_no: string
-  query_token: string
+  query_token_hash: string
   position_slug: PositionSlug
+  applicant_minecraft_username: string
+  applicant_discord_username: string
+  discord_user_id: string | null
+  discord_connected: boolean
+  age: number | null
+  daily_hours: number | null
+  minecraft_experience: string | null
+  staff_experience: string | null
+  self_introduction: string | null
   status: ApplicationStatus
-  applicant_name: string
-  applicant_email: string
-  discord_username?: string | null
-  discord_id?: string | null
-  submitted_at?: string | null
-  reviewed_at?: string | null
-  total_score?: number | null
+  submitted_at: string
+  updated_at: string
+  decided_at: string | null
+  decided_by: string | null
+  notification_status: ApplicationNotificationStatus
+  source_ip_hash: string | null
+  /** Eski yönetim listesi sıralaması için `submitted_at` takma adı; DB sütunu değildir. */
+  created_at?: string
+}
+
+/** application_answers tablosu; eski soruların anlık görüntüsünü de taşır. */
+export interface ApplicationAnswer {
+  id: string
+  application_id: string
+  question_id: string
+  question_text: string
+  question_type: QuestionType
+  category_name: string | null
+  position_slug: PositionSlug | 'all' | null
+  options_snapshot: QuestionOption[]
+  value: unknown
+  created_at: string
+}
+
+/** application_scores tablosu; kriter başına tek satır ve ağırlık anlık görüntüsü. */
+export interface ApplicationScore {
+  id: string
+  application_id: string
+  criterion_key: ScoreCriterionKey
+  points: number
+  weight_snapshot: number
+  scored_by: string | null
   created_at: string
   updated_at: string
 }
 
-export interface ApplicationAnswer {
-  id?: string
-  application_id: string
-  question_id: string
-  answer_text?: string | null
-  answer_value?: string | null
-  created_at?: string
-}
-
-export interface ApplicationScore {
-  id?: string
-  application_id: string
-  criterion: ScoreCriterionKey
-  score: number
-  scored_by?: string | null
-  created_at?: string
-  updated_at?: string
-}
-
+/** application_notes tablosu. */
 export interface ApplicationNote {
   id: string
   application_id: string
@@ -113,67 +136,76 @@ export interface ApplicationNote {
   created_at: string
 }
 
+/** application_history tablosu; satırları 0003 tetikleyicisi yazar. */
 export interface ApplicationHistory {
   id: string
   application_id: string
   from_status: ApplicationStatus | null
   to_status: ApplicationStatus
-  changed_by?: string | null
-  note?: string | null
+  action: string
+  actor: string | null
+  details: Record<string, unknown>
   created_at: string
 }
 
+/** admins tablosu. Parola özeti asla istemciye gönderilmez. */
 export interface AdminUser {
   id: string
-  email: string
-  display_name: string
-  role: 'admin' | 'super_admin' | 'staff'
+  username: string
   is_active: boolean
-  discord_id?: string | null
-  last_login_at?: string | null
   created_at: string
+  last_login_at: string | null
 }
 
+/** admin_sessions tablosu; oturum anahtarının yalnızca özeti tutulur. */
 export interface AdminSession {
-  access_token: string
-  refresh_token: string
-  expires_at: number
-  user: AdminUser
+  token_hash: string
+  admin_id: string
+  csrf_token: string
+  expires_at: string
+  created_at: string
+  revoked_at: string | null
 }
 
+/** discord_links tablosu. */
 export interface DiscordLink {
-  id?: string
-  discord_id: string
+  discord_user_id: string
   discord_username: string
-  application_id?: string | null
+  application_id: string | null
   linked_at: string
+  oauth_state_hash: string | null
 }
 
+/** notification_queue tablosu. */
 export interface DiscordNotification {
-  id?: string
+  id: string
   application_id: string
-  channel: string
+  discord_user_id: string | null
+  kind: string
+  payload: Record<string, unknown>
   status: 'pending' | 'sent' | 'failed'
-  payload?: Record<string, unknown> | null
-  error_message?: string | null
-  created_at?: string
-  sent_at?: string | null
+  attempts: number
+  last_error: string | null
+  created_at: string
+  sent_at: string | null
 }
 
+/** app_settings tablosu; value jsonb olduğu için tipi serbesttir. */
 export interface SystemSetting {
   key: string
-  value: string | null
-  description?: string | null
-  updated_by?: string | null
-  updated_at?: string
+  value: unknown
+  updated_at: string
 }
 
+/** audit_logs tablosu; append-only günlük. */
 export interface AuditLog {
   id: string
+  actor_type: 'admin' | 'system'
+  actor_id: string | null
   action: string
-  entity_type: string
-  entity_id: string | null
-  admin_id: string | null
-  details?: Record<string, unknown> | null
+  target_table: string | null
+  target_id: string | null
+  details: Record<string, unknown>
+  ip_hash: string | null
   created_at: string
 }

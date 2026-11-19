@@ -5,7 +5,13 @@ import { statusLabel } from '../../lib/scoring'
 import { POSITIONS } from '../../lib/constants'
 import type { Application } from '../../types'
 
-export type ApplicationSortKey = 'tracking_no' | 'applicant_name' | 'position_slug' | 'status' | 'created_at'
+export type ApplicationSortKey =
+  | 'tracking_no'
+  | 'applicant_minecraft_username'
+  | 'position_slug'
+  | 'status'
+  | 'submitted_at'
+  | 'created_at'
 
 interface Column {
   key: ApplicationSortKey
@@ -14,7 +20,7 @@ interface Column {
 
 const COLUMNS: Column[] = [
   { key: 'tracking_no', label: 'Takip no' },
-  { key: 'applicant_name', label: 'Başvuran' },
+  { key: 'applicant_minecraft_username', label: 'Başvuran' },
   { key: 'position_slug', label: 'Pozisyon' },
   { key: 'status', label: 'Durum' },
   { key: 'created_at', label: 'Tarih' },
@@ -93,8 +99,8 @@ export default function ApplicationTable({
                 {application.tracking_no}
               </td>
               <td className="px-4 py-3">
-                <p className="font-medium text-slate-100">{application.applicant_name}</p>
-                <p className="text-xs text-slate-500">{application.applicant_email}</p>
+                <p className="font-medium text-slate-100">{application.applicant_minecraft_username}</p>
+                <p className="text-xs text-slate-500">{application.applicant_discord_username}</p>
               </td>
               <td className="whitespace-nowrap px-4 py-3 text-slate-300">
                 {POSITIONS.find((position) => position.slug === application.position_slug)?.label ??
@@ -104,7 +110,7 @@ export default function ApplicationTable({
                 <Badge variant={application.status}>{statusLabel(application.status)}</Badge>
               </td>
               <td className="whitespace-nowrap px-4 py-3 text-xs text-slate-400">
-                {formatDate(application.created_at || application.submitted_at || '')}
+                {formatDate(application.submitted_at || application.created_at || '')}
               </td>
               <td className="px-4 py-3 text-right text-xs font-semibold text-emerald-300">Görüntüle →</td>
             </tr>

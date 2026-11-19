@@ -482,6 +482,60 @@ export function isAllowedOrigin(
   })
 }
 
+// ---------------------------------------------------------------------------
+// Denetim günlüğü ve bildirim kuyruğu sözleşmesi (0001 şeması)
+// ---------------------------------------------------------------------------
+
+/**
+ * audit_logs satırını şemadaki sütun adlarıyla üretir.
+ * entity_* / admin_id gibi eski alanlar şemada bulunmaz; actor_type zorunludur.
+ */
+export function buildAuditRow(
+  adminId: string | null,
+  action: string,
+  entityType: string,
+  entityId: string | null,
+  details: Record<string, unknown> = {},
+): {
+  actor_type: 'admin' | 'system'
+  actor_id: string | null
+  action: string
+  target_table: string
+  target_id: string | null
+  details: Record<string, unknown>
+} {
+  return {
+    actor_type: adminId ? 'admin' : 'system',
+    actor_id: adminId,
+    action,
+    target_table: entityType,
+    target_id: entityId,
+    details,
+  }
+}
+
+/** Yeniden gönder yalnızca başarısız bildirimler için geçerlidir. */
+export function canRetryNotification(status: unknown): boolean {
+  return status === 'failed'
+}
+
+/** Günlük aktivite seçeneğini şemadaki sayısal daily_hours aralığına eşler. */
+export function dailyActivityToHours(value: unknown): number {
+  const map: Record<string, number> = {
+    her_gun: 6,
+    haftada_birkaç: 3,
+    haftada_bir: 1,
+    nadir: 0.5,
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) return Math.min(24, Math.max(0, value))
+  if (typeof value === 'string') {
+    if (map[value] !== undefined) return map[value]
+    const numeric = Number(value)
+    if (Number.isFinite(numeric)) return Math.min(24, Math.max(0, numeric))
+  }
+  return 0
+}
+
 /** Discord OAuth geri dönüş adresi yalnızca yapılandırılmış originlere izin verir. */
 export function isSafeReturnTo(value: unknown, allowed: string[] = getAllowedOrigins()): boolean {
   if (typeof value !== 'string' || !value || value.startsWith('//')) return false

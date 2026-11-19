@@ -78,36 +78,49 @@ async function getSchemas(): Promise<Record<SchemaName, Schema>> {
           tracking_no: z.string().regex(/^LSC-\d{4}-[A-Z2-9]{6}$/),
           query_token: z.string().regex(/^[0-9a-fA-F]{64}$/),
         }),
+        // Normalleştirilmiş başvuru gövdesi; alan adları 0001 şemasıyla birebir aynıdır.
         application: z
           .object({
             position_slug: z.enum(['rehber', 'aac']),
-            applicant_name: z.string().trim().regex(/^[A-Za-z0-9_]{3,16}$/),
-            applicant_email: z.string().trim().email().max(255),
-            discord_username: z.string().trim().regex(/^[a-zA-Z0-9._]{2,32}$/),
+            applicant_minecraft_username: z.string().trim(),
+            applicant_discord_username: z.string().trim(),
             age: z.number(),
-            hours_per_week: z.number(),
+            daily_hours: z.number(),
+            minecraft_experience: z.string().max(4000).nullable().optional(),
+            staff_experience: z.string().max(4000).nullable().optional(),
+            self_introduction: z.string().max(4000).nullable().optional(),
             answers: z.union([
               z.record(answerValue),
-              z.array(z.object({ question_id: z.string().uuid(), answer: answerValue })),
+              z.array(
+                z.object({
+                  question_id: z.string().uuid(),
+                  value: answerValue,
+                }),
+              ),
             ]),
             website: z.string().max(200).optional().nullable(),
             elapsed_ms: z.number().min(0),
           })
-          .refine((value: any) => isValidMinecraftUsername(value.applicant_name), {
+          .refine((value: any) => isValidMinecraftUsername(value.applicant_minecraft_username), {
             message: 'Geçersiz Minecraft kullanıcı adı.',
-            path: ['applicant_name'],
+            path: ['applicant_minecraft_username'],
           })
-          .refine((value: any) => isValidDiscordUsername(value.discord_username), {
-            message: 'Geçersiz Discord kullanıcı adı.',
-            path: ['discord_username'],
-          })
+          .refine(
+            (value: any) =>
+              isValidDiscordUsername(value.applicant_discord_username) &&
+              /^[A-Za-z0-9_.]{3,32}$/.test(value.applicant_discord_username),
+            {
+              message: 'Geçersiz Discord kullanıcı adı.',
+              path: ['applicant_discord_username'],
+            },
+          )
           .refine((value: any) => isValidAge(value.age), {
             message: 'Yaş 10 ile 120 arasında olmalıdır.',
             path: ['age'],
           })
-          .refine((value: any) => isValidHours(value.hours_per_week), {
-            message: 'Haftalık saat 0 ile 24 arasında olmalıdır.',
-            path: ['hours_per_week'],
+          .refine((value: any) => isValidHours(value.daily_hours), {
+            message: 'Günlük saat 0 ile 24 arasında olmalıdır.',
+            path: ['daily_hours'],
           }),
         question: z.object(questionFields),
         questionPatch: z.object(questionFields).partial(),

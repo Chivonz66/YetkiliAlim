@@ -8,7 +8,6 @@ import {
   ClipboardList,
   Hash,
   MessageCircle,
-  Mail,
   MapPin,
   RotateCcw,
   UserRound,
@@ -44,15 +43,9 @@ import type {
   Question,
 } from '../../types'
 
-interface DetailedAnswer extends ApplicationAnswer {
-  question_text?: string | null
-  question_type?: string | null
-  options_snapshot?: Array<{ label?: string; value?: string }> | null
-}
-
 interface DetailState {
   application: Application
-  answers: DetailedAnswer[]
+  answers: ApplicationAnswer[]
   scores: ApplicationScore[]
   notes: ApplicationNote[]
   history: ApplicationHistory[]
@@ -68,16 +61,8 @@ function categoryLabel(id: string | null | undefined): string {
   return index >= 0 ? QUESTION_CATEGORIES[index].label : 'Diğer kategori'
 }
 
-function answerText(answer: DetailedAnswer): string {
-  const raw = answer.answer_text ?? answer.answer_value
-  if (!raw) return '—'
-  try {
-    const parsed = JSON.parse(raw)
-    if (Array.isArray(parsed) || typeof parsed === 'object') return formatAnswerValue(parsed)
-    return formatAnswerValue(parsed)
-  } catch {
-    return formatAnswerValue(raw)
-  }
+function answerText(answer: ApplicationAnswer): string {
+  return formatAnswerValue(answer.value)
 }
 
 function notificationLabel(status: string | null | undefined): string {
@@ -196,10 +181,8 @@ export default function ApplicationDetailPage() {
   }
 
   const { application, answers, scores, notes, history } = detail
-  const notificationStatus = String(
-    (application as Application & { notification_status?: string }).notification_status ?? '',
-  )
-  const hasDiscord = Boolean(application.discord_id || application.discord_username)
+  const notificationStatus = application.notification_status
+  const hasDiscord = Boolean(application.discord_user_id || application.applicant_discord_username)
   const decided = application.status === 'accepted' || application.status === 'rejected'
 
   return (
@@ -234,18 +217,15 @@ export default function ApplicationDetailPage() {
           <dl className="space-y-3 text-sm">
             <div className="flex items-start gap-3">
               <UserRound size={16} className="mt-0.5 shrink-0 text-cyan-300" />
-              <div><dt className="text-xs text-slate-500">Minecraft adı</dt><dd className="font-semibold text-slate-100">{application.applicant_name}</dd></div>
-            </div>
-            <div className="flex items-start gap-3">
-              <Mail size={16} className="mt-0.5 shrink-0 text-cyan-300" />
-              <div><dt className="text-xs text-slate-500">E-posta</dt><dd className="break-all text-slate-100">{application.applicant_email}</dd></div>
+              <div><dt className="text-xs text-slate-500">Minecraft adı</dt><dd className="font-semibold text-slate-100">{application.applicant_minecraft_username}</dd></div>
             </div>
             <div className="flex items-start gap-3">
               <MessageCircle size={16} className="mt-0.5 shrink-0 text-cyan-300" />
               <div>
                 <dt className="text-xs text-slate-500">Discord bağlantısı</dt>
                 <dd className="text-slate-100">
-                  {hasDiscord ? application.discord_username || application.discord_id : 'Bağlanmadı'}
+                  {application.applicant_discord_username || 'Belirtilmedi'}
+                  {application.discord_connected ? ' · bağlı' : ''}
                 </dd>
               </div>
             </div>
@@ -272,7 +252,7 @@ export default function ApplicationDetailPage() {
               <CalendarDays size={16} className="mt-0.5 shrink-0 text-emerald-300" />
               <div>
                 <dt className="text-xs text-slate-500">Gönderim tarihi</dt>
-                <dd className="text-slate-100">{formatDateTime(application.submitted_at || application.created_at)}</dd>
+                <dd className="text-slate-100">{formatDateTime(application.submitted_at)}</dd>
               </div>
             </div>
             <div className="flex items-start gap-3">
@@ -338,9 +318,9 @@ export default function ApplicationDetailPage() {
                 </Button>
               )}
             </div>
-            {notifications.find((item) => item.error_message)?.error_message && (
+            {notifications.find((item) => item.last_error)?.last_error && (
               <p className="mt-2 text-xs text-red-300">
-                {notifications.find((item) => item.error_message)?.error_message}
+                {notifications.find((item) => item.last_error)?.last_error}
               </p>
             )}
           </div>

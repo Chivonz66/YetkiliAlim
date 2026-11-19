@@ -31,7 +31,9 @@ export default function ScorePanel({
   const initial = useMemo(() => {
     const map: Record<string, number> = {}
     for (const score of scores ?? []) {
-      if (score?.criterion && typeof score.score === 'number') map[score.criterion] = score.score
+      if (score?.criterion_key && typeof score.points === 'number') {
+        map[score.criterion_key] = score.points
+      }
     }
     return map
   }, [scores])

@@ -15,16 +15,24 @@ type NoteData = { application_id: string; note: string }
 async function loadWeights(client: any): Promise<Record<string, number>> {
   const weights: Record<string, number> = {}
   try {
-    const result = await client.from('score_criteria').select('key, weight, max_score')
+    const result = await client.from('score_criteria').select('criterion_key, weight')
     if (result.error || !Array.isArray(result.data)) return weights
     for (const row of result.data) {
-      const value = Number(row.weight ?? row.max_score)
-      if (typeof row.key === 'string' && Number.isFinite(value)) weights[row.key] = value
+      const value = Number(row.weight)
+      if (typeof row.criterion_key === 'string' && Number.isFinite(value)) {
+        weights[row.criterion_key] = value
+      }
     }
   } catch {
-    // Tablo yoksa sabit ağırlıklar kullanılır.
+    // Tablo okunamazsa SCORE_CRITERIA sabit ağırlıkları kullanılır.
   }
   return weights
+}
+
+function weightFor(criterion: string, weights: Record<string, number>): number {
+  const fallback = SCORE_CRITERIA.find((item) => item.key === criterion)?.weight ?? 0
+  const value = Number(weights[criterion])
+  return Number.isFinite(value) && value > 0 ? value : fallback
 }
 
 async function run(req: Request): Promise<Response> {
@@ -86,13 +94,13 @@ async function run(req: Request): Promise<Response> {
 
     const existingResult = await client
       .from('application_scores')
-      .select('criterion, score')
+      .select('criterion_key, points')
       .eq('application_id', application_id)
     if (existingResult.error) return error(defaultMessage(500), 500, 'database')
     const merged: Record<string, number> = {}
     for (const row of existingResult.data ?? []) {
-      if (typeof row.criterion === 'string' && typeof row.score === 'number') {
-        merged[row.criterion] = row.score
+      if (typeof row.criterion_key === 'string' && typeof row.points === 'number') {
+        merged[row.criterion_key] = row.points
       }
     }
     Object.assign(merged, scores)
@@ -101,26 +109,23 @@ async function run(req: Request): Promise<Response> {
     if (!validation.valid) return error(validation.error ?? 'Puanlar geçersiz.', 400, 'validation')
 
     for (const [criterion, score] of Object.entries(scores)) {
+      const weightSnapshot = weightFor(criterion, weights)
+      if (Number(score) > weightSnapshot) {
+        return error(`${criterion} puanı kaydedilen ağırlığı (${weightSnapshot}) aşamaz.`, 400, 'validation')
+      }
       const upsert = await client.from('application_scores').upsert(
         {
           application_id,
-          criterion,
-          score,
+          criterion_key: criterion,
+          points: score,
+          weight_snapshot: weightSnapshot,
           scored_by: auth.adminId,
         },
-        { onConflict: 'application_id,criterion' },
+        { onConflict: 'application_id,criterion_key' },
       )
       if (upsert.error) return error(defaultMessage(500), 500, 'database')
     }
 
-    // Toplam puan tabloda tutuluyorsa güncellenir; eksik sütun işlemi engellemez.
-    const totalUpdate = await client
-      .from('applications')
-      .update({ total_score: validation.total })
-      .eq('id', application_id)
-    if (totalUpdate.error && totalUpdate.error.code !== '42703' && totalUpdate.error.code !== 'PGRST204') {
-      return error(defaultMessage(500), 500, 'database')
-    }
     await writeAudit(client, auth.adminId, 'scores_update', 'applications', application_id, {
       scores,
       total: validation.total,

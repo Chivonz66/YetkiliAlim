@@ -7,6 +7,21 @@ import { readJson, validate } from '../_shared/validation.ts'
 
 type QuestionBody = Record<string, any>
 
+/**
+ * İstemci soru tipini `type` alanıyla gönderir; şemadaki sütun `question_type`'tır.
+ * Yazma işlemlerinde yalnızca şema sütunları kullanılır.
+ */
+function toDbFields(fields: Record<string, any>): Record<string, any> {
+  const { type, ...rest } = fields
+  return type === undefined ? rest : { ...rest, question_type: type }
+}
+
+/** Okunan satırlardaki `question_type` değerini istemci sözleşmesine çevirir. */
+function fromDbRow(row: Record<string, any>): Record<string, any> {
+  const { question_type, ...rest } = row
+  return { ...rest, type: question_type }
+}
+
 async function loadAll(client: any): Promise<Response> {
   const questions = await client.from('questions').select('*').order('sort_order', { ascending: true })
   if (questions.error) return error(defaultMessage(500), 500, 'database')
@@ -22,7 +37,7 @@ async function loadAll(client: any): Promise<Response> {
     byQuestion.set(option.question_id, list)
   }
   const items = (questions.data ?? []).map((question: any) => ({
-    ...question,
+    ...fromDbRow(question),
     options: byQuestion.get(question.id) ?? [],
   }))
   return json({ ok: true, questions: items })
@@ -83,7 +98,7 @@ async function run(req: Request): Promise<Response> {
       const checked = await validate<QuestionBody>('question', body)
       if (!checked.ok) return error(checked.error, 400, 'validation')
       const { options, ...fields } = checked.data
-      const inserted = await client.from('questions').insert(fields).select('*').single()
+      const inserted = await client.from('questions').insert(toDbFields(fields)).select('*').single()
       if (inserted.error || !inserted.data) return error(defaultMessage(500), 500, 'database')
       const optionError = await saveOptions(client, inserted.data.id, options ?? [])
       if (optionError) return error(optionError, 500, 'database')
@@ -93,7 +108,7 @@ async function run(req: Request): Promise<Response> {
       return json(
         {
           ok: true,
-          question: { ...(fresh.data ?? inserted.data), options: savedOptions.data ?? [] },
+          question: { ...fromDbRow(fresh.data ?? inserted.data), options: savedOptions.data ?? [] },
         },
         201,
       )
@@ -107,7 +122,12 @@ async function run(req: Request): Promise<Response> {
       const { options, ...fields } = checked.data
       let updated: any = { data: null, error: null }
       if (Object.keys(fields).length > 0) {
-        updated = await client.from('questions').update(fields).eq('id', id).select('*').maybeSingle()
+        updated = await client
+          .from('questions')
+          .update(toDbFields(fields))
+          .eq('id', id)
+          .select('*')
+          .maybeSingle()
         if (updated.error) return error(defaultMessage(500), 500, 'database')
         if (!updated.data) return error(defaultMessage(404), 404, 'not_found')
       }
@@ -122,7 +142,7 @@ async function run(req: Request): Promise<Response> {
       const savedOptions = await client.from('question_options').select('*').eq('question_id', id)
       return json({
         ok: true,
-        question: { ...(fresh.data ?? updated.data ?? {}), options: savedOptions.data ?? [] },
+        question: { ...fromDbRow(fresh.data ?? updated.data ?? {}), options: savedOptions.data ?? [] },
       })
     }
 
