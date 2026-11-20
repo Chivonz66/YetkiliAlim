@@ -95,6 +95,23 @@ CREATE POLICY "Uygulama ayarlarina herkese acik erisim yok"
   ON public.app_settings FOR ALL TO anon, authenticated
   USING (false) WITH CHECK (false);
 
+-- Yalnızca başvuru akışının ihtiyaç duyduğu public ayarlar okunabilir.
+-- Diğer anahtarlar yukarıdaki açık reddetme politikasıyla kapalı kalır.
+DROP POLICY IF EXISTS "Herkes public ayarlari okuyabilir" ON public.app_settings;
+CREATE POLICY "Herkes public ayarlari okuyabilir"
+  ON public.app_settings FOR SELECT TO anon, authenticated
+  USING (
+    key IN (
+      'site_title',
+      'applications_open',
+      'closed_message',
+      'discord_enabled',
+      'min_minecraft_age_months',
+      'rate_limit_per_ip_per_hour'
+    )
+  );
+GRANT SELECT ON public.app_settings TO anon, authenticated;
+
 DROP POLICY IF EXISTS "Hiz sinirlarina herkese acik erisim yok" ON public.rate_limits;
 CREATE POLICY "Hiz sinirlarina herkese acik erisim yok"
   ON public.rate_limits FOR ALL TO anon, authenticated
