@@ -4,7 +4,9 @@ coverage/
 .env
 .env.local
 .env.*.local
+.setup-secrets
 *.local
 *.tsbuildinfo
 .DS_Store
 npm-debug.log*
+supabase/.temp/
