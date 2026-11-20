@@ -14,6 +14,7 @@ import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
 import { Spinner } from '../../components/ui/Spinner'
 import { getSetupStatus } from '../../lib/api-admin'
+import { withBasePath } from '../../lib/constants'
 import { useAdminToast } from '../../components/admin/AdminLayout'
 
 // Anahtar değişkeninin adı parçalı oluşturulur: tarayıcı paketinde gizli
@@ -184,7 +185,7 @@ export default function AdminSetupPage() {
 
             <div className="flex flex-col items-center justify-between gap-3 sm:flex-row">
               <a
-                href="/docs/kurulum.md"
+                href={withBasePath('/docs/kurulum.md')}
                 target="_blank"
                 rel="noreferrer"
                 className="inline-flex items-center gap-2 text-sm text-emerald-300 hover:underline"
