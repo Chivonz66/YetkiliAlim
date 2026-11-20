@@ -25,6 +25,7 @@ import {
 import { Button } from '../ui/Button'
 import { Badge } from '../ui/Badge'
 import { listApplications, logoutAdmin } from '../../lib/api-admin'
+import { withBasePath } from '../../lib/constants'
 import { cn } from '../../lib/utils'
 
 export type ToastKind = 'success' | 'error' | 'info'
@@ -222,7 +223,7 @@ export default function AdminLayout({ username, onLoggedOut }: AdminLayoutProps)
 
       <div className="mt-auto space-y-3">
         <a
-          href="/"
+          href={withBasePath('/')}
           className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-400 transition-colors hover:bg-white/5 hover:text-white"
         >
           <ArrowLeft size={16} /> Siteye dön
