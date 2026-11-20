@@ -8,28 +8,24 @@
     <script>
       // GitHub Pages SPA yönlendirme şeması:
       // public/404.html, istenen yolu encodeURIComponent(path) ile kodlar ve
-      // "/?/kodlanmis-yol" adresine yönlendirir. Burada location.search içindeki
-      // "?..." bölümü decodeURIComponent ile çözülüp history.replaceState ile
-      // gerçek istemci tarafı rotasına yazılır. 404.html ile aynı şema kullanılmalıdır.
-      // Kodlama dizeleri index.html ile BİREBİR aynıdır; biri değişirse diğeri de değişmelidir.
+      // "/?/kodlanmis-yol" adresine yönlendirir. Baştaki "/" kodlanmaz;
+      // index.html search.slice(1) ile gelen "/" ve kodu birleştirir.
       (function () {
         var search = window.location.search
-        var hamYol = window.location.pathname + window.location.search + window.location.hash
+        var tamYol = window.location.pathname + window.location.search + window.location.hash
 
         // GitHub Pages proje sitelerinde ilk yol bileşeni depo adıdır (VITE_BASE_PATH).
-        // İstemci rotası (/apply/rehber, /status, /admin) bu önek olmadan saklanır.
         var bolumler = window.location.pathname.split('/')
         var depo = bolumler[1] || ''
         var taban = depo ? '/' + depo + '/' : '/'
-        var path = depo && hamYol.indexOf(taban) === 0 ? hamYol.slice(taban.length - 1) : hamYol
-        if (path.charAt(0) !== '/') path = '/' + path
+        var path = tamYol.replace(/^\//, '')
 
         if (search.indexOf('?/') === 0) {
-          // index.html ile aynı geri yükleme adımı (404.html doğrudan da açılabilir).
+          // index.html ile birebir aynı geri yükleme adımı.
           path = decodeURIComponent(search.slice(1))
           window.history.replaceState(null, '', path + window.location.hash)
         } else {
-          // Derin bağlantı: tam yolu sorgu dizisine kodlayıp ana sayfaya dön.
+          // Derin bağlantı: base path dahil tam yolu kodlayıp ana sayfaya dön.
           window.location.replace(taban + '?/' + encodeURIComponent(path))
         }
       })()

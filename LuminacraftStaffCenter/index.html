@@ -11,10 +11,9 @@
     <title>Luminacraft Staff Center</title>
     <script>
       // GitHub Pages SPA yönlendirme şeması:
-      // public/404.html, istenen yolu encodeURIComponent(path) ile kodlar ve
-      // "/?/kodlanmis-yol" adresine yönlendirir. Burada location.search içindeki
-      // "?..." bölümü decodeURIComponent ile çözülüp history.replaceState ile
-      // gerçek istemci tarafı rotasına yazılır. 404.html ile aynı şema kullanılmalıdır.
+      // public/404.html istenen yolu encodeURIComponent(path) ile kodlar ve
+      // "/?/kodlanmis-yol" adresine yönlendirir. Kodlanan yolda baştaki "/" yoktur;
+      // search.slice(1) ile gelen öndeki "/" tam yolu geri oluşturur.
       (function () {
         var search = window.location.search
         if (search.indexOf('?/') === 0) {
