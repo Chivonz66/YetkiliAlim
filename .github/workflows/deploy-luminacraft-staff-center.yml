@@ -27,9 +27,9 @@ jobs:
     # Örn. https://KULLANICI.github.io/DEPO-ADI/  ->  /DEPO-ADI/
     env:
       VITE_BASE_PATH: /${{ github.event.repository.name }}/
-      # Publishable (anon) key tarayıcıya konur; service-role key asla buraya girmez.
-      VITE_SUPABASE_URL: https://tovozezdhkchwrdlhmmr.supabase.co
-      VITE_SUPABASE_ANON_KEY: sb_publishable_cdhzkbVAZ2Ay1KEzUiP0iw_Ib-fjlHK
+      # Gerçek değerler repo Variables üzerinden gelir; service-role key asla girmez.
+      VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
     steps:
       - name: Depoyu al / Checkout
         uses: actions/checkout@v4
