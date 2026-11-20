@@ -18,6 +18,7 @@ import { Textarea } from '../../components/ui/Textarea'
 import { useAdminToast } from '../../components/admin/AdminLayout'
 import { getSettings, updateSettings } from '../../lib/api-admin'
 import type { SettingsMap } from '../../lib/api-public'
+import { withBasePath } from '../../lib/constants'
 
 type Tab = 'system' | 'discord'
 
@@ -154,7 +155,10 @@ export default function SettingsPage() {
   }
 
   const clientId = String(import.meta.env.VITE_DISCORD_CLIENT_ID ?? '').trim()
-  const redirectUri = typeof window === 'undefined' ? '' : `${window.location.origin}/admin/login`
+  const redirectUri =
+    typeof window === 'undefined'
+      ? ''
+      : `${window.location.origin}${withBasePath('/admin/login')}`
 
   return (
     <div className="space-y-6">

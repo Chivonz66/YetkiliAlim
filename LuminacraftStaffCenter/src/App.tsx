@@ -7,6 +7,7 @@ import {
 } from 'react'
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { Spinner } from './components/ui/Spinner'
+import { BASE_PATH } from './lib/constants'
 
 const HomePage = lazy(() => import('./pages/HomePage'))
 const ApplyPage = lazy(() => import('./pages/ApplyPage'))
@@ -69,7 +70,7 @@ function LoadingFallback() {
 export default function App() {
   return (
     <ErrorBoundary>
-      <BrowserRouter>
+      <BrowserRouter basename={BASE_PATH || '/'}>
         <Suspense fallback={<LoadingFallback />}>
           <Routes>
             <Route path="/" element={<HomePage />} />

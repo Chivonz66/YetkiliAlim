@@ -5,6 +5,15 @@ import type {
   ScoreCriterionKey,
 } from '../types'
 
+/** GitHub Pages alt dizinlerinde router ve yönlendirmeler için kullanılan kök yol. */
+export const BASE_PATH: string = (import.meta.env.BASE_URL || '/').replace(/\/+$/, '')
+
+/** Uygulama içi bir yolu aktif base path ile birleştirir. */
+export function withBasePath(path: string): string {
+  const normalized = path.startsWith('/') ? path : `/${path}`
+  return `${BASE_PATH}${normalized}`
+}
+
 export interface QuestionTypeOption {
   value: QuestionType
   label: string

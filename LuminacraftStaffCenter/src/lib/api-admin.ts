@@ -22,6 +22,7 @@ import type {
   DiscordNotification,
 } from '../types'
 import type { SettingsMap } from './api-public'
+import { BASE_PATH, withBasePath } from './constants'
 
 export const NOT_CONFIGURED_MESSAGE =
   'Yönetim paneli yapılandırılmadı. Lütfen sistem yöneticisine başvurun.'
@@ -82,9 +83,9 @@ async function getConfiguredClient(): Promise<ConfiguredClient> {
 
 function redirectToLogin(): void {
   if (typeof window === 'undefined') return
-  const path = window.location.pathname
+  const path = window.location.pathname.slice(BASE_PATH.length)
   if (path.startsWith('/admin/login') || path.startsWith('/admin/setup')) return
-  window.location.assign('/admin/login')
+  window.location.assign(withBasePath('/admin/login'))
 }
 
 async function readErrorPayload(response: Response): Promise<{ message: string; code?: string }> {

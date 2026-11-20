@@ -43,7 +43,7 @@ import {
   type PublicQuestion,
   type SettingsMap,
 } from '../lib/api-public'
-import { POSITIONS } from '../lib/constants'
+import { POSITIONS, withBasePath } from '../lib/constants'
 import { isAnswerValid } from '../lib/utils'
 
 interface ApplicantState {
@@ -667,7 +667,10 @@ export function ApplyPage() {
                         Bağlandı {applicant.discord_username ? `· ${applicant.discord_username}` : ''}
                       </Badge>
                     ) : (
-                      <a href={getDiscordOAuthUrl(location.pathname)} className="btn-minecraft shrink-0 self-start">
+                      <a
+                        href={getDiscordOAuthUrl(withBasePath(location.pathname))}
+                        className="btn-minecraft shrink-0 self-start"
+                      >
                         <Gift size={15} aria-hidden="true" />
                         Discord hesabını bağlan
                       </a>
