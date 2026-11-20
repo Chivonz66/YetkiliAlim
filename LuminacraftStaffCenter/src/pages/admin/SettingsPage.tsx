@@ -210,7 +210,7 @@ export default function SettingsPage() {
           <p className="text-sm text-slate-400">Ayarlar yükleniyor...</p>
         </div>
       ) : tab === 'system' ? (
-        <form onSubmit={handleSaveSystem} className="space-y-5">
+        <form onSubmit={handleSaveSystem} noValidate className="space-y-5">
           <Card title="Başvuru akışı" description="Başvuruların açık olup olmadığını ve kapanış mesajını belirleyin.">
             <div className="space-y-4">
               <Switch
