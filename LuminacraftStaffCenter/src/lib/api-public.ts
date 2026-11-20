@@ -216,6 +216,7 @@ interface RawOption {
   option_value?: unknown
   option_sort_order?: unknown
   option_is_active?: unknown
+  options_snapshot?: unknown
 }
 
 function normalizeOption(input: unknown): QuestionOption | null {
@@ -247,7 +248,7 @@ export function getQuestionOptions(question: Question | PublicQuestion | null | 
   const raw = question as PublicQuestion & RawOption
   const collected: QuestionOption[] = []
 
-  for (const list of [raw.question_options, raw.options]) {
+  for (const list of [raw.question_options, raw.options, raw.options_snapshot]) {
     if (!Array.isArray(list)) continue
     for (const item of list) {
       const option = normalizeOption(item)
@@ -286,17 +287,21 @@ export function mapPublicQuestion(raw: unknown): PublicQuestion | null {
   if (!raw || typeof raw !== 'object') return null
   const row = raw as Record<string, any>
   if (!row.id) return null
-  const type: QuestionType = QUESTION_TYPES.some((item) => item.value === row.type)
-    ? (row.type as QuestionType)
+  // RPC `get_public_questions` DB sütun adlarını döndürür (`question_type`),
+  // yönetim API'si ise istemci sözleşmesini (`type`) kullanır. İkisini de kabul et.
+  const rawType = row.type ?? row.question_type
+  const type: QuestionType = QUESTION_TYPES.some((item) => item.value === rawType)
+    ? (rawType as QuestionType)
     : 'short_text'
   const category = row.question_categories ?? row.category ?? null
+  const categoryId = row.category_id ?? row.category_slug ?? null
   const positionSlug = ['rehber', 'aac', 'all'].includes(String(row.position_slug))
     ? (row.position_slug as Question['position_slug'])
     : null
 
   return {
     id: String(row.id),
-    category_id: row.category_id ? String(row.category_id) : null,
+    category_id: categoryId ? String(categoryId) : null,
     position_slug: positionSlug,
     type,
     question_text: String(row.question_text ?? row.question ?? ''),

@@ -13,6 +13,7 @@ import {
   groupQuestions,
   isHoneypotFilled,
   isPositionOpen,
+  mapPublicQuestion,
   normalizeAnswers,
 } from '../src/lib/api-public'
 import type { Question, QuestionType } from '../src/types'
@@ -191,6 +192,46 @@ describe('pozisyon ve seçenek yardımcıları', () => {
     ])
     expect(groups.map((group) => group.name)).toEqual(['Genel bilgiler', 'Deneyim'])
     expect(groups[0].questions[0].id).toBe('q-1')
+  })
+})
+
+describe('get_public_questions RPC yanıtı', () => {
+  it('question_type alanını yedi soru tipine doğru eşler', () => {
+    for (const type of ALL_TYPES) {
+      const mapped = mapPublicQuestion({
+        id: `q-${type}`,
+        question_type: type,
+        category_slug: 'general',
+        category_name: 'Genel bilgiler',
+        question_text: `${type} sorusu`,
+        is_required: true,
+        sort_order: 1,
+      })
+      expect(mapped?.type).toBe(type)
+    }
+  })
+
+  it('category_slug alanından adım gruplarını oluşturur', () => {
+    const questions = [
+      { id: 'q-1', question_type: 'short_text', category_slug: 'general', category_name: 'Genel bilgiler', question_text: 'Ad', is_required: true },
+      { id: 'q-2', question_type: 'single_choice', category_slug: 'rehber', category_name: 'Rehber soruları', question_text: 'Soru', is_required: true },
+    ].map((row) => mapPublicQuestion(row)!)
+
+    expect(questions.map((question) => question.category_id)).toEqual(['general', 'rehber'])
+    expect(groupQuestions(questions).map((group) => group.name)).toEqual(['Genel bilgiler', 'Rehber soruları'])
+  })
+
+  it('options_snapshot seçeneklerini okur, type alanıyla da uyumludur', () => {
+    const mapped = mapPublicQuestion({
+      id: 'q-3',
+      type: 'multiple_choice',
+      category_slug: 'rehber',
+      question_text: 'Destek alanları',
+      is_required: true,
+      options_snapshot: [{ label: 'Oyuncu desteği', value: 'destek', sort_order: 0 }],
+    })
+    expect(mapped?.type).toBe('multiple_choice')
+    expect(getQuestionOptions(mapped).map((option) => option.value)).toEqual(['destek'])
   })
 })
 
