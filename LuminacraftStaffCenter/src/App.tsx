@@ -8,6 +8,7 @@ import {
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { Spinner } from './components/ui/Spinner'
 import { BASE_PATH } from './lib/constants'
+import NotFoundPage from './pages/NotFoundPage'
 
 const HomePage = lazy(() => import('./pages/HomePage'))
 const ApplyPage = lazy(() => import('./pages/ApplyPage'))
@@ -78,6 +79,7 @@ export default function App() {
             <Route path="/status" element={<StatusPage />} />
             <Route path="/admin" element={<AdminApp />} />
             <Route path="/admin/*" element={<AdminApp />} />
+            <Route path="*" element={<NotFoundPage />} />
           </Routes>
         </Suspense>
       </BrowserRouter>
