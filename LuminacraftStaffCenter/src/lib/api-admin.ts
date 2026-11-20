@@ -29,6 +29,21 @@ export const NOT_CONFIGURED_MESSAGE =
 
 export const CSRF_COOKIE_NAME = 'lsc_csrf'
 
+// CSRF çerezi Edge Function alan adına (Supabase) ait olduğundan tarayıcı
+// github.io üzerinden document.cookie ile okuyamaz. Sunucu verify/login
+// yanıtında değeri döndürür; gönderilen isteklerde bu değer kullanılır.
+let csrfToken = ''
+
+/** Sunucu yanıtındaki CSRF değerini saklar (çıkış/oturum hatasında temizlenir). */
+export function setCsrfToken(token: string | null | undefined): void {
+  csrfToken = typeof token === 'string' ? token : ''
+}
+
+/** İstek başlığında kullanılacak CSRF değerini döndürür. */
+export function getCsrfToken(): string {
+  return csrfToken || getCsrfCookie()
+}
+
 export class ApiError extends Error {
   code?: string
   status?: number
@@ -127,7 +142,7 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
         'Content-Type': 'application/json',
         apikey: config.anonKey,
         Authorization: `Bearer ${config.anonKey}`,
-        'X-CSRF-Token': getCsrfCookie(),
+        'X-CSRF-Token': getCsrfToken(),
       },
       ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
     })
@@ -137,7 +152,10 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
 
   if (!response.ok) {
     const { message, code } = await readErrorPayload(response)
-    if (response.status === 401 && !options.skipUnauthorizedRedirect) redirectToLogin()
+    if (response.status === 401) {
+      setCsrfToken('')
+      if (!options.skipUnauthorizedRedirect) redirectToLogin()
+    }
     throw new ApiError(message, code, response.status)
   }
 
@@ -169,23 +187,32 @@ export interface SetupStatusResponse {
 }
 
 export async function verifyAdmin(): Promise<AdminAuthResponse> {
-  return request<AdminAuthResponse>('admin-auth', {
+  const result = await request<AdminAuthResponse>('admin-auth', {
     method: 'POST',
     body: { action: 'verify' },
     skipUnauthorizedRedirect: true,
   })
+  setCsrfToken(result.csrf_token)
+  return result
 }
 
 export async function loginAdmin(username: string, password: string): Promise<LoginResponse> {
-  return request<LoginResponse>('admin-auth', {
+  const result = await request<LoginResponse>('admin-auth', {
     method: 'POST',
     body: { action: 'login', username, password },
     skipUnauthorizedRedirect: true,
   })
+  setCsrfToken(result.csrf_token)
+  return result
 }
 
 export async function logoutAdmin(): Promise<{ ok: boolean }> {
-  return request<{ ok: boolean }>('admin-auth', { method: 'POST', body: { action: 'logout' } })
+  const result = await request<{ ok: boolean }>('admin-auth', {
+    method: 'POST',
+    body: { action: 'logout' },
+  })
+  setCsrfToken('')
+  return result
 }
 
 export async function getSetupStatus(): Promise<SetupStatusResponse> {

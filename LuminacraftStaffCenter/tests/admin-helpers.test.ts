@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { SCORE_CRITERIA } from '../src/lib/constants'
-import { ApiError, getCsrfCookie } from '../src/lib/api-admin'
+import { ApiError, getCsrfCookie, getCsrfToken, setCsrfToken } from '../src/lib/api-admin'
 import {
   averageScore,
   calculateTotal,
@@ -22,6 +22,7 @@ const FULL_SCORE = {
 
 afterEach(() => {
   vi.unstubAllGlobals()
+  setCsrfToken('')
 })
 
 describe('puan hesaplama', () => {
@@ -124,6 +125,16 @@ describe('api-admin yardımcıları', () => {
   it('getCsrfCookie çerez yoksa boş metin döndürür', () => {
     vi.stubGlobal('document', { cookie: 'foo=bar' })
     expect(getCsrfCookie()).toBe('')
+  })
+
+  it('sunucu yanıtındaki CSRF değeri çerez okunamasa da istekte kullanılır', () => {
+    // github.io sayfası Supabase alan adına ait çerezi document.cookie ile okuyamaz.
+    vi.stubGlobal('document', { cookie: 'foo=bar' })
+    expect(getCsrfToken()).toBe('')
+    setCsrfToken('sunucu-dondurdugu-deger')
+    expect(getCsrfToken()).toBe('sunucu-dondurdugu-deger')
+    setCsrfToken(null)
+    expect(getCsrfToken()).toBe('')
   })
 
   it('ApiError mesaj, kod ve durum bilgisini taşır', () => {
