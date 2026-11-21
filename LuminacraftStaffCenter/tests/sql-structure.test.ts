@@ -350,6 +350,12 @@ describe('tohum verisi', () => {
     expect(TOHUM).toContain("('rate_limit_per_ip_per_hour', '5'::jsonb)")
   })
 
+  it('pozisyon açıklık ayarları herkese açık okuma kapsamında', () => {
+    expect(TUM_SQL, '0002').toContain("_applications_open$'")
+    expect(TUM_SQL, '0008').toContain("_applications_open$'")
+    expect(TUM_SQL).toContain('Herkes public ayarlari okuyabilir')
+  })
+
   it('tüm tohum eklemeleri yinelemeye dayanıklı', () => {
     const conflictSayisi = (TOHUM.match(/ON CONFLICT [^\n]*DO NOTHING/g) ?? []).length
     expect(conflictSayisi).toBeGreaterThanOrEqual(6)

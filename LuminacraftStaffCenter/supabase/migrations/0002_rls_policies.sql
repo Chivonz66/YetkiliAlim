@@ -109,6 +109,7 @@ CREATE POLICY "Herkes public ayarlari okuyabilir"
       'min_minecraft_age_months',
       'rate_limit_per_ip_per_hour'
     )
+    OR key ~ '^[a-z0-9_-]+_applications_open$'
   );
 GRANT SELECT ON public.app_settings TO anon, authenticated;
 

@@ -50,6 +50,7 @@ const GEREKLI_DOSYALAR: ReadonlyArray<string> = [
   'LuminacraftStaffCenter/supabase/migrations/0005_submit_atomic.sql',
   'LuminacraftStaffCenter/supabase/migrations/0006_decision_notify.sql',
   'LuminacraftStaffCenter/supabase/migrations/0007_live_reconciliation.sql',
+  'LuminacraftStaffCenter/supabase/migrations/0008_public_position_settings.sql',
 ]
 
 const DOKUMANLAR = [
@@ -222,6 +223,7 @@ describe('doküman ve dağıtım dosyaları', () => {
       '0005_submit_atomic.sql',
       '0006_decision_notify.sql',
       '0007_live_reconciliation.sql',
+      '0008_public_position_settings.sql',
       'ADMIN_SETUP_SECRET',
       '.env.example',
       'VITE_SUPABASE_ANON_KEY',

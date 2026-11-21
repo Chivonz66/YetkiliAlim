@@ -18,7 +18,7 @@ Toplam süre: yaklaşık 20–30 dakika. Gereksinimler: Node.js 20+, npm, bir Su
 
 ## 2. Migrations dosyalarını sırayla uygula
 
-Yedi SQL dosyası `LuminacraftStaffCenter/supabase/migrations/` altındadır. **Sıra önemlidir**; şema → RLS → fonksiyon/tetikleyici → tohum veri → atomik başvuru → bildirim tekilleştirme → canlı uzlaştırma.
+Sekiz SQL dosyası `LuminacraftStaffCenter/supabase/migrations/` altındadır. **Sıra önemlidir**; şema → RLS → fonksiyon/tetikleyici → tohum veri → atomik başvuru → bildirim tekilleştirme → canlı uzlaştırma → pozisyon ayarı izni.
 
 | Sıra | Dosya | Ne yapar |
 | --- | --- | --- |
@@ -29,12 +29,13 @@ Yedi SQL dosyası `LuminacraftStaffCenter/supabase/migrations/` altındadır. **
 | 5 | `0005_submit_atomic.sql` | `submit_application_atomic(...)` ve atomik `increment_rate_limit(...)` RPC'leri. |
 | 6 | `0006_decision_notify.sql` | Bildirim kuyruğunda tekilleştirme anahtarı, tek bekleyen satır garantisi ve `claim_pending_notification` / `claim_failed_notification` RPC'leri. |
 | 7 | `0007_live_reconciliation.sql` | İlk dağıtımdan sonra düzenlenen 0001/0003/0004 değişikliklerini zaten uygulanmış veritabanına ileriye dönük olarak taşır. |
+| 8 | `0008_public_position_settings.sql` | `${slug}_applications_open` ayarlarının herkese açık okunmasını sağlayan RLS politikası. |
 
 **Yöntem A — Supabase SQL Editor (önerilen):**
 
 1. Supabase Dashboard → **SQL Editor → New query**.
 2. `0001_initial_schema.sql` içeriğini yapıştırın → **Run**. "Success" görmeden sonraki dosyaya geçmeyin.
-3. Aynı işlemi `0002`, `0003`, `0004`, `0005`, `0006`, `0007` için sırayla yapın.
+3. Aynı işlemi `0002`, `0003`, `0004`, `0005`, `0006`, `0007`, `0008` için sırayla yapın.
 4. Tohum veri (`0004`) `ON CONFLICT DO NOTHING` kullanır; dosyayı birden fazla kez çalıştırmak veri çoğaltmaz. `0007`, mevcut yaş sorusunu 16–99 olarak günceller.
 
 **Yöntem B — psql (yerel/CLI):**
@@ -48,6 +49,7 @@ psql "$DATABASE_URL" -f supabase/migrations/0004_seed_data.sql
 psql "$DATABASE_URL" -f supabase/migrations/0005_submit_atomic.sql
 psql "$DATABASE_URL" -f supabase/migrations/0006_decision_notify.sql
 psql "$DATABASE_URL" -f supabase/migrations/0007_live_reconciliation.sql
+psql "$DATABASE_URL" -f supabase/migrations/0008_public_position_settings.sql
 ```
 
 > Bu dosyalar Supabase CLI'nin zaman damgalı göç adlandırmasını kullanmaz; bu yüzden `supabase db push` yerine yukarıdaki sıralı yöntemlerden birini kullanın.
@@ -192,7 +194,7 @@ npm run build      # tsc -b && vite build → dist/
 
 ## 9. Doğrulama kontrol listesi
 
-- [ ] SQL Editor'da yedi göç dosyası hatasız uygulandı; `positions=2`, `questions=13`, ölçüt ağırlık toplamı `100`, yaş sorusu `16–99`.
+- [ ] SQL Editor'da sekiz göç dosyası hatasız uygulandı; `positions=2`, `questions=13`, ölçüt ağırlık toplamı `100`, yaş sorusu `16–99`.
 - [ ] `create_first_admin`, `apply_application_decision`, `submit_application_atomic`, `increment_rate_limit`, `claim_pending_notification`, `claim_failed_notification` RPC'leri `service_role` için çalıştırılabiliyor.
 - [ ] `.env` gerçek proje URL/anon anahtarını içeriyor, `service_role` içermiyor.
 - [ ] `node scripts/create-first-admin.mjs` başarılı; `admins` tablosunda 1 kayıt var.
@@ -216,7 +218,7 @@ npm run build      # tsc -b && vite build → dist/
 | Başvuru `429 rate_limit` | IP başına saatlik sınır (varsayılan 5) doldu | Bir saat bekleyin veya `app_settings.rate_limit_per_ip_per_hour` değerini yönetim panelinden güncelleyin. |
 | CORS hatası (tarayıcı konsolunda) | `ALLOWED_ORIGINS` üretim adresini içermiyor | Origin'i virgülle ayrılmış listeye ekleyip uçları yeniden dağıtın; joker `*` kullanmayın. |
 | `İlk yönetici zaten oluşturulmuş` | `admins` tablosu dolu | Mevcut hesapla giriş yapın; değiştirme gerekiyorsa CLI'daki onay ifadesiyle `ALLOW_REPLACE_ADMIN=1` kullanın. |
-| `42703 / PGRST204` kolom hatası | Göç sırası atlandı veya şema sürümü eski | 0001→0007 sırasıyla yeniden uygulayın; uçlar bazı kolom varyantlarını tolere etse de şema tam olmalıdır. |
+| `42703 / PGRST204` kolom hatası | Göç sırası atlandı veya şema sürümü eski | 0001→0008 sırasıyla yeniden uygulayın; uçlar bazı kolom varyantlarını tolere etse de şema tam olmalıdır. |
 | Discord callback `invalid_state` | `DISCORD_REDIRECT_URI` farklı, cookie veya state süresi (10 dk) doldu | Yönlendirme URL'sini birebir eşitleyip akışı baştan başlatın. |
 | DM `failed` | Kullanıcı DM'leri kapalı veya bot token yok | Kullanıcı ayarını açın, `DISCORD_BOT_TOKEN` secret'ını kontrol edin, panelden **Yeniden Dene** yapın. |
 | GitHub Pages 404 / boş sayfa | `VITE_BASE_PATH` yanlış veya Pages kaynağı yanlış | [github-pages.md](github-pages.md) belgesindeki dağıtım kontrol listesini izleyin. |
