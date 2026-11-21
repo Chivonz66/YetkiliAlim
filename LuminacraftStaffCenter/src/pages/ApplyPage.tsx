@@ -38,6 +38,7 @@ import {
   getSettings,
   groupQuestions,
   isHoneypotFilled,
+  requestDiscordLinkToken,
   submitApplication,
   type PublicApiErrorLike,
   type PublicQuestion,
@@ -215,18 +216,42 @@ export function ApplyPage() {
   const [submitError, setSubmitError] = useState('')
   const [submission, setSubmission] = useState<{ tracking_no: string; query_token: string } | null>(null)
   const [discordLinked, setDiscordLinked] = useState(false)
+  const [discordLinkToken, setDiscordLinkToken] = useState('')
+  const [oauthHref, setOauthHref] = useState('')
   const [copied, setCopied] = useState('')
 
   useEffect(() => {
     const params = new URLSearchParams(location.search)
     if (params.get('discord') !== 'linked') return
     const username = params.get('username') ?? ''
+    const token = params.get('discord_link_token') ?? ''
     if (username) {
       setApplicant((previous) => ({ ...previous, discord_username: username }))
     }
-    setDiscordLinked(true)
+    // Discord kimliği yalnızca imzalı bağlantı belirteciyle doğrulanır.
+    if (token) {
+      setDiscordLinkToken(token)
+      setDiscordLinked(true)
+    }
     if (location.search) navigate(`${location.pathname}${location.hash}`, { replace: true })
   }, [location.search, location.pathname, location.hash, navigate])
+
+  useEffect(() => {
+    if (!position || discordLinked) return
+    let active = true
+    void requestDiscordLinkToken()
+      .then((token) => {
+        if (!active) return
+        setDiscordLinkToken(token)
+        setOauthHref(getDiscordOAuthUrl(withBasePath(location.pathname), token))
+      })
+      .catch(() => {
+        if (active) setOauthHref('')
+      })
+    return () => {
+      active = false
+    }
+  }, [position?.slug, location.pathname, discordLinked])
 
   useEffect(() => {
     if (!position) return
@@ -375,6 +400,7 @@ export function ApplyPage() {
         answers,
         website,
         elapsed_ms: computeElapsedMs(mountedAt.current),
+        discord_link_token: discordLinkToken,
       })
       setSubmission(result)
       goToTop()
@@ -668,7 +694,11 @@ export function ApplyPage() {
                       </Badge>
                     ) : (
                       <a
-                        href={getDiscordOAuthUrl(withBasePath(location.pathname))}
+                        href={oauthHref}
+                        aria-disabled={!oauthHref}
+                        onClick={(event) => {
+                          if (!oauthHref) event.preventDefault()
+                        }}
                         className="btn-minecraft shrink-0 self-start"
                       >
                         <Gift size={15} aria-hidden="true" />

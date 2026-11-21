@@ -34,15 +34,22 @@ const EDGE = 'supabase/functions'
 type AlanVar<T, K extends PropertyKey> = K extends keyof T ? true : false
 
 describe('Edge Function veritabanı sözleşmesi', () => {
-  it('başvuru gönderimi şema alanlarını ve rate limit anahtarını kullanır', () => {
+  it('başvuru gönderimi şema alanlarını ve atomik RPC sözleşmesini kullanır', () => {
     const code = kod(`${EDGE}/submit-application/index.ts`)
     expect(code).toContain('applicant_minecraft_username: minecraft')
     expect(code).toContain('applicant_discord_username: discord')
     expect(code).toContain('daily_hours:')
     expect(code).toContain('query_token_hash: tokenHash')
-    expect(code).toContain("from('rate_limits')")
-    expect(code).toContain("onConflict: 'key,window_start'")
-    expect(code).toContain('hit_count')
+    expect(code).toContain("rpc('increment_rate_limit'")
+    expect(code).toContain("rpc('submit_application_atomic'")
+    expect(code).toContain('p_key: key')
+    expect(code).toContain('p_window_start: windowStart.toISOString()')
+    expect(code).toContain('p_limit: limit')
+    expect(code).toContain('p_answers: answerRows')
+    expect(code).toContain('p_discord_user_id: discordLink?.userId ?? null')
+    expect(code).not.toMatch(/\.from\('rate_limits'\)/)
+    expect(code).not.toMatch(/\.from\('applications'\)\s*\.insert/)
+    expect(code).not.toMatch(/\.from\('application_answers'\)\s*\.insert/)
   })
 
   it('cevaplar question_type ve jsonb value alanlarıyla yazılır', () => {
@@ -102,11 +109,18 @@ describe('Edge Function veritabanı sözleşmesi', () => {
     expect(code).toContain('const { question_type, ...rest } = row')
   })
 
-  it('pozisyon güncellemeleri is_open alanını veritabanına göndermez', () => {
+  it('pozisyon is_open değerini kanonik app_settings anahtarına yazar', () => {
     const code = kod(`${EDGE}/admin-positions/index.ts`)
+    expect(code).toContain("requireAdmin(req, { csrf: method !== 'GET' })")
     expect(code).toContain('const { is_open: _ignored, ...rest } = fields')
     expect(code).not.toMatch(/\.update\(\{[^}]*\bis_open\b/s)
     expect(code).not.toMatch(/\.insert\(\{[^}]*\bis_open\b/s)
+    expect(code).toContain('return `${slug}_applications_open`')
+    expect(code).toContain("from('app_settings').upsert")
+    expect(code).toContain('key: applicationOpenKey(slug)')
+    expect(code).toContain('value: isOpen')
+    expect(code).toContain("onConflict: 'key'")
+    expect(code).toContain('is_open: openFlags[String(position.slug)] ?? true')
   })
 
   it('uygulama ayarları jsonb değerini dönüştürmeden saklar', () => {
@@ -134,6 +148,41 @@ describe('Edge Function veritabanı sözleşmesi', () => {
     expect(code).toContain("onConflict: 'discord_user_id'")
     expect(code).toContain("eq('oauth_state_hash', hash)")
     expect(code).not.toMatch(/\bstate_hash\s*:|\bdiscord_id\s*:/)
+  })
+
+  it('Discord OAuth bağlantısı imzalı belirteçle sınırlıdır ve application_id kabul etmez', () => {
+    const code = kod(`${EDGE}/discord-oauth/index.ts`)
+    expect(code).toContain('signSessionToken')
+    expect(code).toContain('verifySessionToken')
+    expect(code).toContain('discord_link_token')
+    expect(code).toContain("verifyLinkToken(url.searchParams.get('discord_link_token'), 'pending', secret)")
+    expect(code).toContain('createLinkToken(discordUserId, \'bound\', secret)')
+    expect(code).toContain("destination.searchParams.set('discord_link_token', boundToken)")
+    expect(code).toContain("requireAdmin(req, { csrf: false })")
+    expect(code).not.toContain("url.searchParams.get('application_id')")
+    expect(code).not.toContain('applicationIdFrom(returnTo, ')
+  })
+
+  it('başvuru gönderimi pozisyon açıklığını ve Discord belirtecini sunucuda doğrular', () => {
+    const code = kod(`${EDGE}/submit-application/index.ts`)
+    expect(code).toContain('${data.position_slug}_applications_open')
+    expect(code).toContain("'position_closed'")
+    expect(code).toContain('verifySessionToken(token, secret)')
+    expect(code).toContain("payload.nonce.startsWith('discord-link:bound:')")
+    expect(code).toContain('values.length > 0 && typeof answer ===')
+    expect(code).not.toMatch(/values\.length === 0 \|\|/)
+  })
+
+  it('0005 göçü atomik başvuru ve hız sınırı fonksiyonlarını tanımlar', () => {
+    const sql = oku('supabase/migrations/0005_submit_atomic.sql')
+    expect(sql).toContain('CREATE OR REPLACE FUNCTION public.submit_application_atomic(')
+    expect(sql).toContain('CREATE OR REPLACE FUNCTION public.increment_rate_limit(')
+    expect(sql).toContain('INSERT INTO public.applications (')
+    expect(sql).toContain('INSERT INTO public.application_answers (')
+    expect(sql).toContain('ON CONFLICT (key, window_start)')
+    expect(sql).toContain('RETURNING hit_count INTO v_hit_count')
+    expect(sql).toContain('application_id = EXCLUDED.application_id')
+    expect(sql).toMatch(/SECURITY DEFINER/)
   })
 
   it('denetim yazımı audit_logs şema sütunlarını kullanır', () => {
