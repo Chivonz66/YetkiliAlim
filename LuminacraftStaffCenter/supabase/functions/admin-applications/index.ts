@@ -11,6 +11,13 @@ function safeSearch(value: string): string {
   return value.replace(/[,()%\\]/g, ' ').trim().slice(0, 100)
 }
 
+/** Veritabanı hatalarını ayrıntılı Edge loguna yazar, istemciye genel mesaj döner. */
+function databaseError(step: string, cause: unknown): Response {
+  const detail = cause instanceof Error ? cause.message : JSON.stringify(cause)
+  console.error('[admin-applications] database_error', JSON.stringify({ step, detail }))
+  return error(defaultMessage(500), 500, 'database')
+}
+
 async function single(client: any, id: string): Promise<Response> {
   const application = await client.from('applications').select('*').eq('id', id).maybeSingle()
   if (application.error) return error(defaultMessage(500), 500, 'database')
@@ -84,13 +91,33 @@ async function run(req: Request): Promise<Response> {
       if (!checked.ok) return error(checked.error, 400, 'validation')
 
       const current = await client.from('applications').select('*').eq('id', id).maybeSingle()
-      if (current.error) return error(defaultMessage(500), 500, 'database')
+      if (current.error) return databaseError('current_lookup', current.error)
       if (!current.data) return error(defaultMessage(404), 404, 'not_found')
 
       const statusChanged = current.data.status !== checked.data.status
       const note = typeof checked.data.note === 'string' ? checked.data.note.trim() : ''
       let application = current.data
       let auditWarning: string | null = null
+
+      const decision = {
+        status: checked.data.status,
+        decided_at: new Date().toISOString(),
+        decided_by: auth.adminId,
+      }
+
+      // Durum gerçekten değiştiyse aktör bağlamı işlem içinde ayarlanır;
+      // geçmiş ve denetim kaydını 0003 tetikleyicisi bir kez yazar. Karar
+      // başarısız olursa not ve denetim kaydı yazılmaz; böylece yarım kalan
+      // karar izleri oluşmaz.
+      if (statusChanged) {
+        const applied = await client.rpc('apply_application_decision', {
+          p_application_id: id,
+          ...decision,
+        })
+        if (applied.error) return databaseError('apply_application_decision', applied.error)
+        if (!applied.data) return error(defaultMessage(404), 404, 'not_found')
+        application = applied.data
+      }
 
       // Karar notu yöneticiye özel kayıttır; durum tetikleyicisiyle aynı
       // eylemi çift denetim kaydı olarak yazmaz.
@@ -100,29 +127,11 @@ async function run(req: Request): Promise<Response> {
           admin_id: auth.adminId,
           note,
         })
-        if (savedNote.error) return error(defaultMessage(500), 500, 'database')
+        if (savedNote.error) return databaseError('decision_note_insert', savedNote.error)
         const audit = await writeAudit(client, auth.adminId, 'decision_note_create', 'application_notes', id, {
           status: checked.data.status,
         })
         if (!audit.ok) auditWarning = audit.error
-      }
-
-      const decision = {
-        status: checked.data.status,
-        decided_at: new Date().toISOString(),
-        decided_by: auth.adminId,
-      }
-
-      // Durum gerçekten değiştiyse aktör bağlamı işlem içinde ayarlanır;
-      // geçmiş ve denetim kaydını 0003 tetikleyicisi bir kez yazar.
-      if (statusChanged) {
-        const applied = await client.rpc('apply_application_decision', {
-          p_application_id: id,
-          ...decision,
-        })
-        if (applied.error) return error(defaultMessage(500), 500, 'database')
-        if (!applied.data) return error(defaultMessage(404), 404, 'not_found')
-        application = applied.data
       }
 
       return json({
@@ -134,7 +143,9 @@ async function run(req: Request): Promise<Response> {
     }
 
     return error(defaultMessage(405), 405, 'method_not_allowed')
-  } catch {
+  } catch (cause) {
+    const detail = cause instanceof Error ? cause.message : String(cause)
+    console.error('[admin-applications] internal_error', JSON.stringify({ detail }))
     return error(defaultMessage(500), 500, 'internal')
   }
 }
@@ -144,7 +155,9 @@ async function run(req: Request): Promise<Response> {
   if (options) return options
   try {
     return withCors(req, await run(req))
-  } catch {
+  } catch (cause) {
+    const detail = cause instanceof Error ? cause.message : String(cause)
+    console.error('[admin-applications] handler_error', JSON.stringify({ detail }))
     return withCors(req, error(defaultMessage(500), 500, 'internal'))
   }
 })
