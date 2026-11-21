@@ -21,20 +21,19 @@ const kok = projeKokunuBul()
 const oku = (goreliYol: string): string =>
   readFileSync(join(kok, goreliYol), 'utf8')
 
-const GOC_DOSYALARI = [
-  '0001_initial_schema.sql',
-  '0002_rls_policies.sql',
-  '0003_functions_triggers.sql',
-  '0004_seed_data.sql',
-] as const
+// Diğer görevler 0005/0006 ekleyebileceğinden liste sabit kodlanmaz; diskten keşfedilir.
+const GOC_DOSYALARI = readdirSync(join(kok, 'supabase/migrations'))
+  .filter((dosya) => /^\d{4}_.+\.sql$/.test(dosya))
+  .sort()
 
 const GOC_METINLERI = GOC_DOSYALARI.map((dosya) => oku(`supabase/migrations/${dosya}`))
 const TUM_SQL = GOC_METINLERI.join('\n')
 
-const SEMA = GOC_METINLERI[0]
-const RLS = GOC_METINLERI[1]
-const TETIKLEYICI = GOC_METINLERI[2]
-const TOHUM = GOC_METINLERI[3]
+// İlk dört göç dosyasının sözleşmesi sabittir; ek göçler TUM_SQL'e dahil edilir.
+const SEMA = oku('supabase/migrations/0001_initial_schema.sql')
+const RLS = oku('supabase/migrations/0002_rls_policies.sql')
+const TETIKLEYICI = oku('supabase/migrations/0003_functions_triggers.sql')
+const TOHUM = oku('supabase/migrations/0004_seed_data.sql')
 const CLI = oku('scripts/create-first-admin.mjs')
 
 const TABLOLAR = [
@@ -104,7 +103,8 @@ function yorumlariKaldir(kod: string): string {
 }
 
 describe('göç dosyaları', () => {
-  it('dört göç dosyası da mevcut ve boş değil', () => {
+  it('göç dosyaları mevcut ve boş değil', () => {
+    expect(GOC_DOSYALARI.length).toBeGreaterThanOrEqual(4)
     for (const dosya of GOC_DOSYALARI) {
       const tamYol = join(kok, 'supabase/migrations', dosya)
       expect(existsSync(tamYol), dosya).toBe(true)
@@ -159,7 +159,10 @@ describe('soru ve başvuru kısıtları', () => {
   })
 
   it('başvuru yaş, saat ve kullanıcı adı açısından güvenli', () => {
-    expect(SEMA).toContain('age >= 10 AND age <= 120')
+    expect(SEMA).toContain('age >= 16 AND age <= 99')
+    expect(SEMA).not.toContain('age >= 10 AND age <= 120')
+    expect(TOHUM).toContain('Yaşın 16 ile 99 arasında olmalıdır.')
+    expect(TOHUM).toMatch(/'Yaşın kaç\?'.{0,120}16, 99/s)
     expect(SEMA).toContain('daily_hours >= 0 AND daily_hours <= 24')
     expect(SEMA).toContain("'^[A-Za-z0-9_]{3,32}$'")
     expect(SEMA).toContain("'^[A-Za-z0-9_.]{3,32}$'")
@@ -389,6 +392,18 @@ describe('ilk yönetici komut satırı aracı', () => {
     expect(CLI).toContain('return=minimal')
     expect(CLI).toContain('method: \'POST\'')
     expect(CLI).toContain('method: \'DELETE\'')
+  })
+
+  it('değiştirme modunda önce yeni yöneticiyi doğrular, sonra siler', () => {
+    const olusturma = CLI.indexOf("body: JSON.stringify({ username: kullaniciAdi, password_hash: parolaOzeti })")
+    const dogrulama = CLI.indexOf('yeniYoneticiDogru(dogrulanan, kullaniciAdi, parolaOzeti)')
+    const silme = CLI.indexOf("method: 'DELETE'")
+    expect(olusturma).toBeGreaterThanOrEqual(0)
+    expect(dogrulama).toBeGreaterThan(olusturma)
+    expect(silme).toBeGreaterThan(dogrulama)
+    expect(CLI).toContain('id=neq.${olusturulan.id}')
+    expect(CLI).toMatch(/en az bir aktif yönetici/i)
+    expect(CLI).not.toContain('NIL_UUID')
   })
 
   it('sırları diske veya günlüğe yazmıyor', () => {

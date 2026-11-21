@@ -6,6 +6,8 @@ import {
   isValidDiscordUsername,
   isValidHours,
   isValidMinecraftUsername,
+  isValidSetupPassword,
+  isValidSetupUsername,
   isValidTrackingNo,
 } from './pure.ts'
 
@@ -19,6 +21,7 @@ type Schema = {
 
 type SchemaName =
   | 'login'
+  | 'setup'
   | 'publicStatus'
   | 'application'
   | 'question'
@@ -34,10 +37,25 @@ type SchemaName =
 
 let schemasPromise: Promise<Record<SchemaName, Schema>> | null = null
 
+/** Edge'de CDN'den, Node/Vitest'ta yerel bağımlılıktan Zod yükler. */
+async function loadZod(): Promise<any> {
+  try {
+    const local = await import('zod')
+    if ((local as any).z) return (local as any).z
+  } catch {
+    // Deno Edge çalışma zamanında çıplak "zod" çözümlenmez; CDN kullanılır.
+  }
+  // Adres parçalı kurulur: Node/TypeScript yerel çözümlemeye çalışmaz; Deno
+  // çalışma zamanında bu bir geçerli HTTPS modülü URL'sidir.
+  const cdnUrl = ['https://esm.sh', 'zod@3'].join('/')
+  const remote = await import(/* @vite-ignore */ cdnUrl)
+  return remote.z as any
+}
+
 async function getSchemas(): Promise<Record<SchemaName, Schema>> {
   if (!schemasPromise) {
-    schemasPromise = import('https://esm.sh/zod@3').then((module) => {
-      const z = module.z as any
+    schemasPromise = (async () => {
+      const z = await loadZod()
       const answerValue = z.union([
         z.string().max(4000),
         z.number(),
@@ -74,6 +92,21 @@ async function getSchemas(): Promise<Record<SchemaName, Schema>> {
           username: z.string().trim().min(1).max(100),
           password: z.string().min(1).max(500),
         }),
+        // Yalnızca sunucu tarafındaki kurulum akışı için katı şema: CLI ile aynı
+        // kullanıcı adı deseni ve en az 12 karakterli parola zorunludur.
+        setup: z
+          .object({
+            username: z.string().trim(),
+            password: z.string(),
+          })
+          .refine((value: any) => isValidSetupUsername(value.username), {
+            message: 'Kullanıcı adı 3-32 karakter olmalı ve yalnızca harf, rakam, _, . veya - içermelidir.',
+            path: ['username'],
+          })
+          .refine((value: any) => isValidSetupPassword(value.password), {
+            message: 'Parola en az 12 karakter olmalıdır.',
+            path: ['password'],
+          }),
         publicStatus: z.object({
           tracking_no: z.string().regex(/^LSC-\d{4}-[A-Z2-9]{6}$/),
           query_token: z.string().regex(/^[0-9a-fA-F]{64}$/),
@@ -115,7 +148,7 @@ async function getSchemas(): Promise<Record<SchemaName, Schema>> {
             },
           )
           .refine((value: any) => isValidAge(value.age), {
-            message: 'Yaş 10 ile 120 arasında olmalıdır.',
+            message: 'Yaş 16 ile 99 arasında olmalıdır.',
             path: ['age'],
           })
           .refine((value: any) => isValidHours(value.daily_hours), {
@@ -172,7 +205,7 @@ async function getSchemas(): Promise<Record<SchemaName, Schema>> {
           notification_id: z.string().uuid().optional(),
         }),
       } as Record<SchemaName, Schema>
-    })
+    })()
   }
   return schemasPromise
 }

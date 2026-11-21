@@ -42,8 +42,8 @@ VALUES
    true, true, 20, 3, 32, NULL, NULL, '[]'::jsonb),
 
   ('10000000-0000-4000-8000-000000000003', '00000000-0000-4000-8000-000000000001', NULL,
-   'Yaşın kaç?', 'Yaşın 10 ile 120 arasında olmalıdır.', 'number',
-   true, true, 30, NULL, NULL, 10, 120, '[]'::jsonb),
+   'Yaşın kaç?', 'Yaşın 16 ile 99 arasında olmalıdır.', 'number',
+   true, true, 30, NULL, NULL, 16, 99, '[]'::jsonb),
 
   ('10000000-0000-4000-8000-000000000004', '00000000-0000-4000-8000-000000000001', NULL,
    'Günde ortalama kaç saat Minecraft oynuyorsun?', '0 ile 24 arasında bir sayı gir.', 'number',

@@ -188,10 +188,10 @@ describe('başvuru alan doğrulama', () => {
   })
 
   it('yaş, saat ve honeypot kurallarını uygular', () => {
-    expect(isValidAge(10)).toBe(true)
-    expect(isValidAge(120)).toBe(true)
-    expect(isValidAge(9)).toBe(false)
-    expect(isValidAge(121)).toBe(false)
+    expect(isValidAge(16)).toBe(true)
+    expect(isValidAge(99)).toBe(true)
+    expect(isValidAge(15)).toBe(false)
+    expect(isValidAge(100)).toBe(false)
     expect(isValidHours(0)).toBe(true)
     expect(isValidHours(24)).toBe(true)
     expect(isValidHours(25)).toBe(false)

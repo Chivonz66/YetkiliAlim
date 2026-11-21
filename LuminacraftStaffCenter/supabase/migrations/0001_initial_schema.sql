@@ -108,7 +108,7 @@ CREATE TABLE IF NOT EXISTS public.applications (
   decided_by uuid,
   notification_status text NOT NULL DEFAULT 'none' CHECK (notification_status IN ('none','queued','pending','sent','failed')),
   source_ip_hash text,
-  CONSTRAINT applications_yas_araligi CHECK (age IS NULL OR (age >= 10 AND age <= 120)),
+  CONSTRAINT applications_yas_araligi CHECK (age IS NULL OR (age >= 16 AND age <= 99)),
   CONSTRAINT applications_gunluk_saat_araligi CHECK (daily_hours IS NULL OR (daily_hours >= 0 AND daily_hours <= 24)),
   CONSTRAINT applications_minecraft_kullanici_adi CHECK (applicant_minecraft_username ~ '^[A-Za-z0-9_]{3,32}$'),
   CONSTRAINT applications_discord_kullanici_adi CHECK (applicant_discord_username ~ '^[A-Za-z0-9_.]{3,32}$'),
@@ -204,6 +204,35 @@ CREATE TABLE IF NOT EXISTS public.admin_sessions (
 );
 
 COMMENT ON TABLE public.admin_sessions IS 'Oturum anahtarının ham değeri değil, sha256 özeti saklanır.';
+
+-- Atomik ilk yönetici ekleme: danışma kilidi, "yönetici var mı?" kontrolü ve
+-- ekleme aynı veritabanı işleminde yapılır (iki ayrı REST çağrısıyla yarış olmaz).
+CREATE OR REPLACE FUNCTION public.create_first_admin(p_username text, p_password_hash text)
+RETURNS TABLE (id uuid, username text)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+BEGIN
+  PERFORM pg_advisory_xact_lock(hashtext('lsc-first-admin'));
+  IF EXISTS (SELECT 1 FROM public.admins) THEN
+    RAISE EXCEPTION 'admin_exists';
+  END IF;
+  IF p_username IS NULL OR p_username !~ '^[A-Za-z0-9_.-]{3,32}$' THEN
+    RAISE EXCEPTION 'invalid_username';
+  END IF;
+  IF p_password_hash IS NULL OR p_password_hash !~ '^pbkdf2\$210000\$[0-9a-f]{32}\$[0-9a-f]{64}$' THEN
+    RAISE EXCEPTION 'invalid_password_hash';
+  END IF;
+  RETURN QUERY
+    INSERT INTO public.admins (username, password_hash)
+    VALUES (p_username, p_password_hash)
+    RETURNING public.admins.id, public.admins.username;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.create_first_admin(text, text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.create_first_admin(text, text) TO service_role;
 
 -- Uygulama ayarları; değerler JSONB olarak tutulur.
 CREATE TABLE IF NOT EXISTS public.app_settings (

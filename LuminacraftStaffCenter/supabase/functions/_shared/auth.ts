@@ -4,13 +4,30 @@ import { error, defaultMessage } from './responses.ts'
 import {
   bytesToHex,
   env,
+  isActiveSession,
   parsePasswordHash,
   PASSWORD_ITERATIONS,
   PASSWORD_KEY_BYTES,
   PASSWORD_SALT_BYTES,
+  sessionTokenHash,
   signSessionToken,
   timingSafeEqualHex,
   verifySessionToken,
+} from './pure.ts'
+
+// Saf yardımcılar pure.ts'te bulunur; Edge Function'lar buradan da içe aktarabilir.
+export {
+  clientIp,
+  INVALID_CREDENTIALS_MESSAGE,
+  isActiveSession,
+  isLoginLocked,
+  LOGIN_LOCKED_MESSAGE,
+  LOGIN_MAX_ATTEMPTS,
+  LOGIN_WINDOW_MS,
+  loginRateLimitKey,
+  loginWindowStart,
+  sessionTokenHash,
+  type AdminSessionRow,
 } from './pure.ts'
 
 export const SESSION_COOKIE = 'lsc_admin_session'
@@ -165,6 +182,18 @@ export async function requireAdmin(
   const db = await getAdminClient()
   if (!db.ok) return { ok: false, response: error(db.error, 503, 'configuration') }
   try {
+    // Ham belirtecin sha256 özetiyle oturum kaydı aranır; iptal/süre kontrolü
+    // yalnızca imzaya güvenmek yerine veritabanında da yapılır.
+    const { data: session, error: sessionError } = await db.client
+      .from('admin_sessions')
+      .select('admin_id, expires_at, revoked_at')
+      .eq('token_hash', sessionTokenHash(token))
+      .maybeSingle()
+    if (sessionError) return { ok: false, response: error(defaultMessage(500), 500, 'database') }
+    if (!isActiveSession(session as AdminSessionRow | null, payload.sub)) {
+      return { ok: false, response: error(defaultMessage(401), 401, 'unauthorized') }
+    }
+
     const { data, error: dbError } = await db.client
       .from('admins')
       .select('id, is_active')

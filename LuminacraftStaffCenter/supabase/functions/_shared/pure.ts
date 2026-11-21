@@ -287,6 +287,60 @@ export function verifySessionToken(
 }
 
 // ---------------------------------------------------------------------------
+// Giriş kilidi ve oturum kaydı yardımcıları (Edge + Node/Vitest için saf)
+// ---------------------------------------------------------------------------
+
+// IP + kullanıcı adı başına 15 dakikalık pencerede en fazla 5 başarısız deneme.
+export const LOGIN_MAX_ATTEMPTS = 5
+export const LOGIN_WINDOW_MS = 15 * 60 * 1000
+export const INVALID_CREDENTIALS_MESSAGE = 'Kullanıcı adı veya şifre hatalı.'
+export const LOGIN_LOCKED_MESSAGE = 'Çok fazla başarısız giriş denemesi. Lütfen daha sonra tekrar deneyin.'
+
+/** Ham IP'yi saklamadan istemci adresini okur (proxy başlıklarını dikkate alır). */
+export function clientIp(req: Request): string {
+  const forwarded = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+  return forwarded || req.headers.get('x-real-ip')?.trim() || 'unknown'
+}
+
+/** rate_limits anahtarı: ham IP ve kullanıcı adı asla diske yazılmaz. */
+export function loginRateLimitKey(ip: string, username: string): string {
+  return `admin_login:${sha256Hex(`${ip}|${username.trim().toLowerCase()}`)}`
+}
+
+/** Sabit 15 dakikalık pencereler, rate_limits.window_start ile uyumlu ISO tarih. */
+export function loginWindowStart(now: Date = new Date()): string {
+  return new Date(Math.floor(now.getTime() / LOGIN_WINDOW_MS) * LOGIN_WINDOW_MS).toISOString()
+}
+
+/** Beşinci başarısız denemeden sonraki istekler kilitlenir. */
+export function isLoginLocked(hitCount: unknown, limit: number = LOGIN_MAX_ATTEMPTS): boolean {
+  const count = typeof hitCount === 'number' ? hitCount : Number(hitCount)
+  return Number.isFinite(count) && count >= limit
+}
+
+/** Oturum tablosunda saklanan tek doğrulayıcı: ham belirtecin sha256 özeti. */
+export function sessionTokenHash(token: string): string {
+  return sha256Hex(token)
+}
+
+export interface AdminSessionRow {
+  admin_id: string
+  expires_at: string
+  revoked_at: string | null
+}
+
+/** Oturum kaydı iptal edilmemiş, süresi dolmamış ve yöneticiyle eşleşmiş olmalı. */
+export function isActiveSession(
+  row: AdminSessionRow | null | undefined,
+  adminId: string,
+  now: number = Date.now(),
+): boolean {
+  if (!row || row.admin_id !== adminId || row.revoked_at !== null) return false
+  const expiresAt = Date.parse(row.expires_at)
+  return Number.isFinite(expiresAt) && expiresAt > now
+}
+
+// ---------------------------------------------------------------------------
 // Şifre karma biçimi ve sabit zamanlı karşılaştırma
 // ---------------------------------------------------------------------------
 
@@ -412,9 +466,27 @@ export function isValidDiscordUsername(value: unknown): boolean {
   return typeof value === 'string' && /^[a-zA-Z0-9._]{2,32}$/.test(value)
 }
 
+/** Başvuru yaşı 16–99 (canonical aralık; şema, tohum ve UI ile aynı). */
 export function isValidAge(value: unknown): boolean {
   const age = typeof value === 'string' ? Number(value) : value
-  return typeof age === 'number' && Number.isFinite(age) && Number.isInteger(age) && age >= 10 && age <= 120
+  return typeof age === 'number' && Number.isFinite(age) && Number.isInteger(age) && age >= 16 && age <= 99
+}
+
+// İlk yönetici kurulumu için katı kimlik bilgisi kuralları; CLI ile birebir aynıdır.
+export const SETUP_USERNAME_PATTERN = /^[A-Za-z0-9_.-]{3,32}$/
+export const MIN_SETUP_PASSWORD_LENGTH = 12
+export const MAX_SETUP_PASSWORD_LENGTH = 500
+
+export function isValidSetupUsername(value: unknown): boolean {
+  return typeof value === 'string' && SETUP_USERNAME_PATTERN.test(value)
+}
+
+export function isValidSetupPassword(value: unknown): boolean {
+  return (
+    typeof value === 'string' &&
+    value.length >= MIN_SETUP_PASSWORD_LENGTH &&
+    value.length <= MAX_SETUP_PASSWORD_LENGTH
+  )
 }
 
 export function isValidHours(value: unknown): boolean {

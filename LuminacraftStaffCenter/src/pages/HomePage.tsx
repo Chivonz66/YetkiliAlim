@@ -31,7 +31,7 @@ import type { Position, PositionSlug } from '../types'
 type LoadState = 'loading' | 'ready' | 'unconfigured'
 
 const REQUIREMENTS = [
-  '16 yaş ve üzeri olmak,',
+  '16–99 yaş arasında olmak,',
   'Sunucuda düzenli ve aktif zaman geçirmek,',
   'Oyunculara karşı saygılı ve sabırlı iletişim kurmak,',
   'Başvuru sorularını dürüstçe ve özenle yanıtlamak.',
@@ -46,7 +46,7 @@ const FAQ = [
   {
     question: 'Kaç yaşında olmam gerekiyor?',
     answer:
-      'Başvuru için en küçük yaş sınırı 16’dır. Başvuru formunda yaş bilgisi zorunludur ve gerçek bilgilerle doldurulmalıdır.',
+      'Başvuru için yaş sınırı 16–99’dur. Başvuru formunda yaş bilgisi zorunludur ve gerçek bilgilerle doldurulmalıdır.',
   },
   {
     question: 'Discord hesabımı bağlamak zorunda mıyım?',
