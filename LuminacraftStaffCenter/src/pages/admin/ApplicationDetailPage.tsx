@@ -403,11 +403,11 @@ export default function ApplicationDetailPage() {
         </p>
         <div className="mt-4">
           <Textarea
-            label="İç not (isteğe bağlı)"
+            label="Karar notu (isteğe bağlı)"
             rows={3}
             maxLength={1000}
             value={decisionNote}
-            placeholder="Karar gerekçenizi yalnızca ekip görecek şekilde yazın."
+            placeholder="Karar gerekçenizi yazın; ekip kayıtlarına iç not olarak işlenir. Discord açıksa başvurana geri bildirim olarak iletilir."
             onChange={(event) => setDecisionNote(event.target.value)}
           />
         </div>

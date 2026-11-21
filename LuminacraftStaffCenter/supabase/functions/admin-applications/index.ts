@@ -1,7 +1,12 @@
 // Başvuru listesi/detayı ve karar kaydı. Karar, bildirim kuyruğuna eklenir.
 import { requireAdmin } from '../_shared/auth.ts'
 import { preflight, withCors } from '../_shared/cors.ts'
-import { getAdminClient, writeAudit } from '../_shared/db.ts'
+import {
+  decisionIdempotencyKey,
+  getAdminClient,
+  isDiscordEnabledSetting,
+  writeAudit,
+} from '../_shared/db.ts'
 import { defaultMessage, error, json } from '../_shared/responses.ts'
 import { readJson, validate } from '../_shared/validation.ts'
 
@@ -9,6 +14,21 @@ type DecisionData = { status: 'pending' | 'reviewing' | 'accepted' | 'rejected';
 
 function safeSearch(value: string): string {
   return value.replace(/[,()%\\]/g, ' ').trim().slice(0, 100)
+}
+
+/** Aynı kuyruk satırının benzersizlik hatasını tanır. */
+function isDuplicateQueueRow(queued: any): boolean {
+  return queued?.error?.code === '23505' || /duplicate key|unique constraint/i.test(String(queued?.error?.message ?? ''))
+}
+
+async function discordEnabled(client: any): Promise<boolean> {
+  const setting = await client
+    .from('app_settings')
+    .select('key, value')
+    .eq('key', 'discord_enabled')
+    .maybeSingle()
+  if (setting.error) return false
+  return isDiscordEnabledSetting(setting.data ? [setting.data] : [])
 }
 
 async function single(client: any, id: string): Promise<Response> {
@@ -83,56 +103,91 @@ async function run(req: Request): Promise<Response> {
       const checked = await validate<DecisionData>('decision', body)
       if (!checked.ok) return error(checked.error, 400, 'validation')
 
-      const current = await client
-        .from('applications')
-        .select('id, status, tracking_no')
-        .eq('id', id)
-        .maybeSingle()
+      const current = await client.from('applications').select('*').eq('id', id).maybeSingle()
       if (current.error) return error(defaultMessage(500), 500, 'database')
       if (!current.data) return error(defaultMessage(404), 404, 'not_found')
 
-      // Durum geçmişi ve denetim kaydı, 0003'teki tetikleyici tarafından
-      // otomatik yazılır; burada elle application_history eklemesi yapılmaz.
-      const updated = await client
-        .from('applications')
-        .update({
-          status: checked.data.status,
-          decided_at: new Date().toISOString(),
-          decided_by: auth.adminId,
-        })
-        .eq('id', id)
-        .select('*')
-        .maybeSingle()
-      if (updated.error) return error(defaultMessage(500), 500, 'database')
-
+      const statusChanged = current.data.status !== checked.data.status
+      const finalStatus = ['accepted', 'rejected'].includes(checked.data.status)
+      const note = typeof checked.data.note === 'string' ? checked.data.note.trim() : ''
+      let application = current.data
       let notificationStatus: 'pending' | 'skipped' = 'skipped'
-      if (['accepted', 'rejected'].includes(checked.data.status)) {
-        const linked = await client
-          .from('discord_links')
-          .select('discord_user_id')
-          .eq('application_id', id)
-          .maybeSingle()
-        const queued = await client.from('notification_queue').insert({
+      let auditWarning: string | null = null
+
+      // Karar notu yöneticiye özel kayıttır; durum tetikleyicisiyle aynı
+      // eylemi çift denetim kaydı olarak yazmaz.
+      if (note) {
+        const savedNote = await client.from('application_notes').insert({
           application_id: id,
-          discord_user_id: linked.data?.discord_user_id ?? null,
-          kind: 'discord',
-          status: 'pending',
-          payload: {
-            tracking_no: current.data.tracking_no,
-            status: checked.data.status,
-            ...(checked.data.note ? { note: checked.data.note } : {}),
-          },
+          admin_id: auth.adminId,
+          note,
         })
-        if (queued.error) return error(defaultMessage(500), 500, 'database')
-        const marked = await client.from('applications').update({ notification_status: 'pending' }).eq('id', id)
-        if (!marked.error) notificationStatus = 'pending'
+        if (savedNote.error) return error(defaultMessage(500), 500, 'database')
+        const audit = await writeAudit(client, auth.adminId, 'decision_note_create', 'application_notes', id, {
+          status: checked.data.status,
+        })
+        if (!audit.ok) auditWarning = audit.error
       }
 
-      await writeAudit(client, auth.adminId, 'application_status_change', 'applications', id, {
-        from_status: current.data.status,
-        to_status: checked.data.status,
+      const decision = {
+        status: checked.data.status,
+        decided_at: new Date().toISOString(),
+        decided_by: auth.adminId,
+      }
+
+      // Durum gerçekten değiştiyse aktör bağlamı işlem içinde ayarlanır;
+      // geçmiş ve denetim kaydını 0003 tetikleyicisi bir kez yazar.
+      if (statusChanged) {
+        const applied = await client.rpc('apply_application_decision', {
+          p_application_id: id,
+          ...decision,
+        })
+        if (applied.error) return error(defaultMessage(500), 500, 'database')
+        if (!applied.data) return error(defaultMessage(404), 404, 'not_found')
+        application = applied.data
+      }
+
+      if (statusChanged && finalStatus) {
+        if (await discordEnabled(client)) {
+          const linked = await client
+            .from('discord_links')
+            .select('discord_user_id')
+            .eq('application_id', id)
+            .maybeSingle()
+          const queued = await client.from('notification_queue').insert({
+            application_id: id,
+            discord_user_id: linked.data?.discord_user_id ?? null,
+            kind: 'discord',
+            status: 'pending',
+            idempotency_key: decisionIdempotencyKey(id, checked.data.status, decision.decided_at),
+            payload: {
+              tracking_no: current.data.tracking_no,
+              status: checked.data.status,
+              ...(note ? { note } : {}),
+            },
+          })
+          if (queued.error && !isDuplicateQueueRow(queued)) {
+            return error(defaultMessage(500), 500, 'database')
+          }
+          if (!queued.error) {
+            const marked = await client.from('applications').update({ notification_status: 'pending' }).eq('id', id)
+            if (marked.error) return error(defaultMessage(500), 500, 'database')
+          }
+          notificationStatus = 'pending'
+        } else {
+          const cleared = await client.from('applications').update({ notification_status: 'none' }).eq('id', id)
+          if (cleared.error) return error(defaultMessage(500), 500, 'database')
+          application = { ...application, notification_status: 'none' }
+        }
+      }
+
+      return json({
+        ok: true,
+        application,
+        notification_status: notificationStatus,
+        status_changed: statusChanged,
+        ...(auditWarning ? { audit_warning: auditWarning } : {}),
       })
-      return json({ ok: true, application: updated.data, notification_status: notificationStatus })
     }
 
     return error(defaultMessage(405), 405, 'method_not_allowed')
