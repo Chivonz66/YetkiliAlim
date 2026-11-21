@@ -357,6 +357,7 @@ export async function getApplication(id: string): Promise<ApplicationDetailRespo
   return request<ApplicationDetailResponse>('admin-applications', { query: { action: 'get', id } })
 }
 
+/** Karar notu yöneticiye özel alan olarak gönderilir; Edge Function iç not olarak kaydeder. */
 export async function updateApplicationStatus(
   id: string,
   status: ApplicationStatus,

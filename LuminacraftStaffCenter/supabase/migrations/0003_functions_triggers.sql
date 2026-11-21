@@ -96,7 +96,14 @@ LANGUAGE plpgsql
 SET search_path = public, pg_temp
 AS $$
 DECLARE
-  v_akteur text := COALESCE(NULLIF(current_setting('app.current_actor', true), ''), 'system');
+  -- Bağlamı karar fonksiyonu işlem kapsamında ayarlar. Doğrudan güncellemelerde
+  -- yalnızca karar durumları için decided_by değerine güvenilir; aksi hâlde
+  -- 'system' kullanılır. Böylece her geçiş tek bir denetim kaydı üretir.
+  v_akteur text := COALESCE(
+    NULLIF(current_setting('app.current_actor', true), ''),
+    CASE WHEN NEW.status IN ('accepted', 'rejected') THEN NULLIF(NEW.decided_by::text, '') END,
+    'system'
+  );
 BEGIN
   IF OLD.status IS DISTINCT FROM NEW.status THEN
     INSERT INTO public.application_history
@@ -134,6 +141,50 @@ DROP TRIGGER IF EXISTS trg_applications_status_change ON public.applications;
 CREATE TRIGGER trg_applications_status_change
   AFTER UPDATE OF status ON public.applications
   FOR EACH ROW EXECUTE FUNCTION public.log_application_status_change();
+
+-- Karar, aktör bağlamıyla aynı işlem içinde uygulanır. set_config(..., true)
+-- ayarı yalnızca bu işlem için geçerlidir; başka isteklere sızmaz. Tetikleyici
+-- aynı işlemde geçmişi ve denetim kaydını bir kez yazar; ayrıca elle denetim
+-- eklemesine gerek kalmaz (çift kayıt önlenir).
+CREATE OR REPLACE FUNCTION public.apply_application_decision(
+  p_application_id uuid,
+  p_status text,
+  p_decided_at timestamptz,
+  p_decided_by uuid
+)
+RETURNS public.applications
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+  v_kayit public.applications;
+BEGIN
+  IF p_status NOT IN ('pending', 'reviewing', 'accepted', 'rejected') THEN
+    RAISE EXCEPTION 'Geçersiz başvuru durumu: %.', p_status;
+  END IF;
+  IF p_decided_by IS NULL THEN
+    RAISE EXCEPTION 'Karar aktörü belirtilmeli.';
+  END IF;
+
+  PERFORM set_config('app.current_actor', p_decided_by::text, true);
+
+  UPDATE public.applications
+     SET status = p_status,
+         decided_at = p_decided_at,
+         decided_by = p_decided_by
+   WHERE id = p_application_id
+   RETURNING * INTO v_kayit;
+
+  RETURN v_kayit;
+END;
+$$;
+
+COMMENT ON FUNCTION public.apply_application_decision(uuid, text, timestamptz, uuid) IS
+  'Yönetici kararını işlem kapsamlı aktör bağlamıyla uygular; tetikleyici denetimi tek kez yazar.';
+
+REVOKE ALL ON FUNCTION public.apply_application_decision(uuid, text, timestamptz, uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.apply_application_decision(uuid, text, timestamptz, uuid) TO service_role;
 
 -- Denetim günlüğü salt okunur (append-only): güncelleme, silme ve kırpma reddedilir.
 CREATE OR REPLACE FUNCTION public.prevent_audit_log_mutation()

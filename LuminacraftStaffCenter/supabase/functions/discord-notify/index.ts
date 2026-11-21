@@ -1,7 +1,7 @@
 // Discord DM bildirimleri. Başarısızlık kararı geçersiz kılmaz; failed durumu döndürülür.
 import { requireAdmin } from '../_shared/auth.ts'
 import { preflight, withCors } from '../_shared/cors.ts'
-import { getAdminClient } from '../_shared/db.ts'
+import { buildDecisionMessage, getAdminClient, isDiscordEnabledSetting } from '../_shared/db.ts'
 import { canRetryNotification, env } from '../_shared/pure.ts'
 import { defaultMessage, error, json } from '../_shared/responses.ts'
 import { readJson, validate } from '../_shared/validation.ts'
@@ -10,9 +10,22 @@ const DISCORD_API = 'https://discord.com/api/v10'
 
 type NotifyData = { application_id?: string; notification_id?: string }
 
-function turkishMessage(trackingNo: string, status: string): string {
-  const decision = status === 'accepted' ? 'kabul edildi' : 'reddedildi'
-  return `Merhaba! ${trackingNo} numaralı Luminacraft ekip başvurunuz ${decision}. Bilgi ve geri bildirimler için ekip yöneticileriyle iletişime geçebilirsiniz.`
+type QueueRow = {
+  id: string
+  application_id: string
+  status: string
+  attempts: number
+  payload?: Record<string, unknown>
+}
+
+async function discordEnabled(client: any): Promise<boolean> {
+  const setting = await client
+    .from('app_settings')
+    .select('key, value')
+    .eq('key', 'discord_enabled')
+    .maybeSingle()
+  if (setting.error) return false
+  return isDiscordEnabledSetting(setting.data ? [setting.data] : [])
 }
 
 async function deliver(
@@ -55,23 +68,43 @@ async function mark(
   status: 'sent' | 'failed',
   message: string | null,
   attempts: number = 0,
-): Promise<void> {
+): Promise<{ ok: boolean; error?: string }> {
+  const genericError = 'Bildirim durumu kaydedilemedi.'
   try {
     if (notificationId) {
-      await client
+      const updated = await client
         .from('notification_queue')
         .update({
           status,
           last_error: message,
           attempts,
           sent_at: status === 'sent' ? new Date().toISOString() : null,
+          claimed_at: null,
         })
         .eq('id', notificationId)
+      if (updated.error) {
+        console.error('[discord-notify] mark_failed', JSON.stringify({ notificationId, detail: updated.error.message }))
+        return { ok: false, error: genericError }
+      }
     }
-    await client.from('applications').update({ notification_status: status }).eq('id', applicationId)
-  } catch {
-    // Durum güncellemesi başarısız olsa bile karar ve sonuç korunur.
+    const markedApp = await client.from('applications').update({ notification_status: status }).eq('id', applicationId)
+    if (markedApp.error) {
+      console.error('[discord-notify] mark_failed', JSON.stringify({ applicationId, detail: markedApp.error.message }))
+      return { ok: false, error: genericError }
+    }
+    return { ok: true }
+  } catch (cause) {
+    console.error(
+      '[discord-notify] mark_failed',
+      JSON.stringify({ applicationId, detail: cause instanceof Error ? cause.message : cause }),
+    )
+    return { ok: false, error: genericError }
   }
+}
+
+function asRow(value: unknown): QueueRow | null {
+  if (Array.isArray(value)) return (value[0] as QueueRow) ?? null
+  return (value as QueueRow) ?? null
 }
 
 async function run(req: Request): Promise<Response> {
@@ -109,18 +142,21 @@ async function run(req: Request): Promise<Response> {
   )
   if (!checked.ok) return error(checked.error, 400, 'validation')
 
+  // Gönderim ve yeniden gönderim yalnızca discord_enabled açıkken yapılır.
+  if (!(await discordEnabled(client))) {
+    return error('Discord bildirimleri devre dışı.', 403, 'discord_disabled')
+  }
+
   const botToken = env('DISCORD_BOT_TOKEN')
   if (!botToken) {
     return error('Discord bot belirteci yapılandırılmamış.', 503, 'configuration')
   }
 
-  let notificationId: string | null = null
-  let applicationId = ''
-  let attempts = 0
+  let claimed: QueueRow | null = null
   if (dataAction === 'retry') {
     const found = await client
       .from('notification_queue')
-      .select('id, application_id, status, attempts')
+      .select('id, application_id, status, attempts, payload')
       .eq('id', checked.data.notification_id)
       .maybeSingle()
     if (found.error) return error(defaultMessage(500), 500, 'database')
@@ -129,32 +165,27 @@ async function run(req: Request): Promise<Response> {
     if (!canRetryNotification(found.data.status)) {
       return error('Yalnızca başarısız bildirimler yeniden gönderilebilir.', 400, 'invalid_state')
     }
-    notificationId = found.data.id
-    applicationId = found.data.application_id
-    attempts = Number(found.data.attempts ?? 0)
+    const locked = await client.rpc('claim_failed_notification', {
+      p_notification_id: found.data.id,
+    })
+    if (locked.error) return error(defaultMessage(500), 500, 'database')
+    claimed = asRow(locked.data)
+    if (!claimed) return error('Bildirim şu anda gönderiliyor.', 409, 'in_progress')
   } else {
-    applicationId = checked.data.application_id ?? ''
-    const existing = await client
-      .from('notification_queue')
-      .select('id, attempts')
-      .eq('application_id', applicationId)
-      .eq('status', 'pending')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-    if (existing.data?.id) {
-      notificationId = existing.data.id
-      attempts = Number(existing.data.attempts ?? 0)
-    } else {
-      const created = await client
-        .from('notification_queue')
-        .insert({ application_id: applicationId, kind: 'discord', status: 'pending', payload: {} })
-        .select('id')
-        .single()
-      if (created.error || !created.data) return error(defaultMessage(500), 500, 'database')
-      notificationId = created.data.id
+    const locked = await client.rpc('claim_pending_notification', {
+      p_application_id: checked.data.application_id,
+    })
+    if (locked.error) return error(defaultMessage(500), 500, 'database')
+    claimed = asRow(locked.data)
+    if (!claimed) {
+      return error('Gönderilecek bekleyen bildirim bulunamadı.', 409, 'invalid_state')
     }
   }
+
+  const notificationId = claimed.id
+  const applicationId = claimed.application_id
+  const attempts = Number(claimed.attempts ?? 0)
+  const notificationPayload = claimed.payload ?? {}
 
   const application = await client
     .from('applications')
@@ -164,6 +195,7 @@ async function run(req: Request): Promise<Response> {
   if (application.error) return error(defaultMessage(500), 500, 'database')
   if (!application.data) return error(defaultMessage(404), 404, 'not_found')
 
+  // Alıcı tercihi: başvuru satırındaki Discord kimliği, ardından bağlantı tablosu.
   let recipientId = application.data.discord_user_id as string | null
   if (!recipientId) {
     const linked = await client
@@ -175,22 +207,42 @@ async function run(req: Request): Promise<Response> {
   }
   if (!recipientId) {
     const reason = 'Başvuruya bağlı Discord kullanıcısı bulunamadı.'
-    await mark(client, notificationId, applicationId, 'failed', reason, attempts + 1)
-    return json({ ok: true, notification_status: 'failed', error: reason, application_id: applicationId })
+    const marked = await mark(client, notificationId, applicationId, 'failed', reason, attempts + 1)
+    return json({
+      ok: true,
+      notification_status: 'failed',
+      error: reason,
+      application_id: applicationId,
+      ...(marked.ok ? {} : { state_warning: marked.error }),
+    })
   }
 
-  const result = await deliver(
-    botToken,
-    recipientId,
-    turkishMessage(String(application.data.tracking_no ?? ''), String(application.data.status ?? '')),
+  // Ekip notu application_notes içinde ham tutulur; DM yalnızca süzülmüş
+  // karar notu kopyasını kullanır (public-status yanıtına asla eklenmez).
+  const content = buildDecisionMessage(
+    String(application.data.tracking_no ?? ''),
+    String(application.data.status ?? ''),
+    notificationPayload.note,
   )
+  const result = await deliver(botToken, recipientId, content)
   if (!result.ok) {
     const reason = result.error ?? 'Discord bildirimi gönderilemedi.'
-    await mark(client, notificationId, applicationId, 'failed', reason, attempts + 1)
-    return json({ ok: true, notification_status: 'failed', error: reason, application_id: applicationId })
+    const marked = await mark(client, notificationId, applicationId, 'failed', reason, attempts + 1)
+    return json({
+      ok: true,
+      notification_status: 'failed',
+      error: reason,
+      application_id: applicationId,
+      ...(marked.ok ? {} : { state_warning: marked.error }),
+    })
   }
-  await mark(client, notificationId, applicationId, 'sent', null, attempts + 1)
-  return json({ ok: true, notification_status: 'sent', application_id: applicationId })
+  const marked = await mark(client, notificationId, applicationId, 'sent', null, attempts + 1)
+  return json({
+    ok: true,
+    notification_status: 'sent',
+    application_id: applicationId,
+    ...(marked.ok ? {} : { state_warning: marked.error }),
+  })
 }
 
 ;(globalThis as any).Deno.serve(async (req: Request): Promise<Response> => {

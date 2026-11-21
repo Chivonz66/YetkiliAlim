@@ -266,7 +266,7 @@ export default function SettingsPage() {
             <div className="space-y-4">
               <Switch
                 label="Discord bildirimleri etkin"
-                hint="Kabul/red kararlarında bildirim kuyruğu oluşturulur."
+                hint="Kapalıyken kabul/red kararları için kuyruk oluşturulmaz; gönderim ve yeniden gönderim engellenir."
                 checked={form.discord_enabled}
                 onChange={(value) => change('discord_enabled', value)}
               />
