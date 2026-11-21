@@ -49,9 +49,9 @@ const FAQ = [
       'Başvuru için yaş sınırı 16–99’dur. Başvuru formunda yaş bilgisi zorunludur ve gerçek bilgilerle doldurulmalıdır.',
   },
   {
-    question: 'Discord hesabımı bağlamak zorunda mıyım?',
+    question: 'Discord kullanıcı adı neden zorunlu?',
     answer:
-      'Hayır. Discord bağlantısı isteğe bağlıdır; bağlamadan da başvurunuzu tamamlayabilirsiniz. Bağlarsanız kullanıcı adınız formda otomatik doldurulur ve ekibimizin sizi tanıması kolaylaşır.',
+      'Discord kullanıcı adınız, ekibimizin sizi tanıması için zorunludur. Formda yalnızca kullanıcı adınızı yazmanız yeterlidir.',
   },
   {
     question: 'Aynı anda birden fazla pozisyona başvurabilir miyim?',
@@ -66,7 +66,7 @@ const FAQ = [
   {
     question: 'Sonuçlar ne zaman açıklanır?',
     answer:
-      'İnceleme süresi başvuru yoğunluğuna göre değişir. Karar verildiğinde başvuru durumunuz güncellenir ve Discord bildirimi etkinse hesabınıza bilgi iletilir.',
+      'İnceleme süresi başvuru yoğunluğuna göre değişir. Karar verildiğinde başvuru durumunuz güncellenir; sonucu başvuru numaranız ve sorgu kodunuzla öğrenebilirsiniz.',
   },
 ]
 

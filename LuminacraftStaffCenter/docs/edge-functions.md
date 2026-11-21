@@ -1,4 +1,4 @@
-# Edge Functions (10 Uç)
+# Edge Functions (8 Uç)
 
 Tüm uçlar Deno çalışma zamanında `Deno.serve` ile çalışır, `OPTIONS` isteklerine `204` döner ve yalnızca `ALLOWED_ORIGINS` içindeki originlere CORS izni verir. Yanıtlar `Cache-Control: no-store` taşır; yığın izi veya iç veritabanı hatası istemciye sızmaz.
 
@@ -10,9 +10,7 @@ Adresler: `<SUPABASE_URL>/functions/v1/<uc-adı>` (istemci tarafında `src/lib/c
 | --- | --- | --- | --- |
 | `admin-auth` | `verify`/`logout` için evet | yalnızca `logout` | `login`, `setup`, `setup-status` oturumsuzdur; `setup` yalnızca `admins` boşken **ve** geçerli `x-admin-setup-secret` başlığı varsa çalışır. |
 | `admin-applications`, `admin-questions`, `admin-positions`, `admin-scores`, `admin-settings` | Evet (`requireAdmin`) | GET dışındaki tüm isteklerde | Çerez `lsc_admin_session`, başlık `x-csrf-token` = `lsc_csrf` çerezi. |
-| `discord-notify` | Evet | GET dışında | Bot token yalnızca sunucuda. |
 | `public-status`, `submit-application` | Hayır (herkese açık) | Yok | Hız sınırı + doğrulama + honeypot; RLS ve RPC ile koruma. |
-| `discord-oauth` | Hayır | Yok (OAuth `state` kullanılır) | 10 dk'lık `state` çerezi + HMAC özeti; açık yönlendirme engellenir. |
 
 Yönetici istekleri için örnek başlıklar (değerler placeholder'dır):
 
@@ -69,7 +67,7 @@ Hatalı kimlik bilgisi `401 invalid_credentials`, CSRF uyuşmazlığı `403 csrf
 
 **Amaç:** Başvuruları filtreleyip listelemek, detay/cevap/puan/not/geçmiş okumak ve karar kaydetmek.
 **Eylemler:** `GET` (sorgu parametreleri: `id`, `status`, `position`/`position_slug`, `search`, `limit` ≤ 200, `offset`), `PATCH` (gövde: `id`, `status`, `note?`).
-**Yetki:** oturum + CSRF (PATCH). `accepted`/`rejected` kararı `notification_queue` kaydı oluşturur.
+**Yetki:** oturum + CSRF (PATCH). `accepted`/`rejected` kararı durum geçişi geçmişine yazılır.
 
 ```bash
 curl "<SUPABASE_URL>/functions/v1/admin-applications?status=pending&limit=50" \
@@ -80,7 +78,7 @@ curl -X PATCH "<SUPABASE_URL>/functions/v1/admin-applications" \
   -H 'Cookie: lsc_admin_session=<OTURUM>; lsc_csrf=<CSRF-DEGERI>' \
   -H 'x-csrf-token: <CSRF-DEGERI>' -H 'Content-Type: application/json' \
   -d '{"id":"<BASTURU-UUID>","status":"accepted","note":"<YONETICI-NOTU>"}'
-# 200 {"ok":true,"application":{...},"notification_status":"pending"}
+# 200 {"ok":true,"application":{...}}
 ```
 
 Arama değeri virgül/parantez/yüzde/ters eğik çizgiden arındırılır ve 100 karaktere kırpılır (PostgREST filtre enjeksiyonu önlemi).
@@ -149,13 +147,13 @@ Yönetici notları `/admin` dışında hiçbir yanıtta yer almaz; özellikle he
 
 ## 6. `admin-settings` — uygulama ayarları
 
-**Amaç:** Başvuru açıklığı, kapalı mesajı, Discord anahtarı ve IP başına saatlik sınırı yönetmek.
+**Amaç:** Başvuru açıklığı, kapalı mesajı ve IP başına saatlik sınırı yönetmek.
 **Eylemler:** `GET` (tüm ayarlar), `PATCH`/`POST` (`{"settings":{...}}` veya `{"key":"...","value":...}`).
 **Yetki:** oturum + CSRF (GET dışı).
 
 ```bash
 curl "<SUPABASE_URL>/functions/v1/admin-settings" -H 'Cookie: lsc_admin_session=<OTURUM>'
-# 200 {"ok":true,"settings":{"applications_open":true,"discord_enabled":false,"rate_limit_per_ip_per_hour":5},"rows":[...]}
+# 200 {"ok":true,"settings":{"applications_open":true,"rate_limit_per_ip_per_hour":5},"rows":[...]}
 
 curl -X PATCH "<SUPABASE_URL>/functions/v1/admin-settings" \
   -H 'Cookie: lsc_admin_session=<OTURUM>; lsc_csrf=<CSRF-DEGERI>' \
@@ -183,8 +181,8 @@ Notlar, puanlar, e-posta ve IP özeti bu yanıtta **asla** yer almaz.
 ## 8. `submit-application` — başvuru alma
 
 **Amaç:** Yeni başvuru ve cevapları kaydetmek, tek kullanımlık sorgu anahtarı üretmek.
-**Eylem:** `POST` (gövde: `position_slug`, `applicant_minecraft_username`, `applicant_discord_username`, `age`, `daily_hours`, `answers`, isteğe bağlı `applicant_email`, `discord_link_token`, `website` (honeypot), `elapsed_ms`).
-**Yetki:** herkese açık; Zod doğrulaması, honeypot, ≥3000 ms doldurma süresi, atomik IP hız sınırı (varsayılan 5), genel `applications_open` **ve** pozisyona özel `${slug}_applications_open` ayarları. Yaş 16–99'dur; Discord bağlantısı yalnızca imzalı `discord_link_token` ile kabul edilir.
+**Eylem:** `POST` (gövde: `position_slug`, `applicant_minecraft_username`, `applicant_discord_username`, `age`, `daily_hours`, `answers`, isteğe bağlı `applicant_email`, `website` (honeypot), `elapsed_ms`).
+**Yetki:** herkese açık; Zod doğrulaması, honeypot, ≥3000 ms doldurma süresi, atomik IP hız sınırı (varsayılan 5), genel `applications_open` **ve** pozisyona özel `${slug}_applications_open` ayarları. Yaş 16–99'dur; Discord kullanıcı adı zorunlu bir düz metin alanıdır ve 3–32 karakter, yalnızca harf/rakam/`.`/`_` kuralına uyar.
 
 ```bash
 curl -X POST "<SUPABASE_URL>/functions/v1/submit-application" \
@@ -196,44 +194,9 @@ curl -X POST "<SUPABASE_URL>/functions/v1/submit-application" \
 
 Sorular ve seçenekler **yalnızca veritabanından** okunur; istemcinin gönderdiği soru metni doğrulanmaz. Cevaplar soru anlık görüntüsüyle birlikte saklanır. sorgu anahtarı yalnızca bu yanıtta bir kez görünür; veritabanında SHA-256 özeti tutulur.
 
-## 9. `discord-oauth` — Discord bağlama
+## Discord kullanıcı adı
 
-**Amaç:** Discord kullanıcısını `identify` kapsamıyla başvuruya bağlamak.
-**Eylemler:** `action=start` (yetkilendirmeye yönlendirir), `action=callback` (kod değişimi + kullanıcı okuma). Parametre yoksa yol `/callback` ile bitiyorsa callback, aksi halde start varsayılır. Başvuru formu imzalı `discord_link_token` üretir ve bu belirteç callback'te bağlanacak Discord kimliğine bağlanır; istemciden keyfi `application_id` kabul edilmez.
-**Yetki:** oturum gerekmez; OAuth `state` çerezi + `SESSION_SECRET` ile HMAC özeti + 10 dk süre.
-
-```bash
-curl -i "<SUPABASE_URL>/functions/v1/discord-oauth?action=start&discord_link_token=<IMZALI-BAGLANTI-BELIRGECI>&return_to=/apply/rehber"
-# 302 Location: https://discord.com/oauth2/authorize?client_id=<CLIENT-ID>&...&scope=identify
-# Set-Cookie: lsc_oauth_state=<STATE>; HttpOnly; Secure; SameSite=None; Max-Age=600
-
-# Discord callback (tarayıcı tarafından yapılır):
-# <SUPABASE_URL>/functions/v1/discord-oauth?action=callback&code=<KOD>&state=<STATE>
-# 302 -> <ALLOWED_ORIGINS[0]>/status?discord=linked&username=<KULLANICI-ADI>
-```
-
-Ayrıntılar: [discord-oauth.md](discord-oauth.md).
-
-## 10. `discord-notify` — Discord DM bildirimleri
-
-**Amaç:** Karar sonrası DM göndermek, kuyruğu listelemek ve başarısız gönderimi tekrar denemek.
-**Eylemler:** `GET ?action=list[&application_id=<UUID>]`, `POST {"action":"send","application_id":"<UUID>"}`, `POST {"action":"retry","notification_id":"<UUID>"}`.
-**Yetki:** oturum + CSRF (POST); `DISCORD_BOT_TOKEN` yalnızca Edge secret'ında.
-
-```bash
-curl "<SUPABASE_URL>/functions/v1/discord-notify?action=list" \
-  -H 'Cookie: lsc_admin_session=<OTURUM>'
-# 200 {"ok":true,"notifications":[{"status":"failed","error_message":"..."}]}
-
-curl -X POST "<SUPABASE_URL>/functions/v1/discord-notify" \
-  -H 'Cookie: lsc_admin_session=<OTURUM>; lsc_csrf=<CSRF-DEGERI>' \
-  -H 'x-csrf-token: <CSRF-DEGERI>' -H 'Content-Type: application/json' \
-  -d '{"action":"retry","notification_id":"<BILDIRIM-UUID>"}'
-# 200 {"ok":true,"notification_status":"sent","application_id":"<BASTURU-UUID>"}
-# veya 200 {"ok":true,"notification_status":"failed","error":"Discord özel mesaj kanalı açılamadı.","application_id":"..."}
-```
-
-DM başarısızlığı kararı geçersiz kılmaz; hata kuyruğa yazılır ve panelden yeniden denenebilir.
+Discord kullanıcı adı başvuranın forma kendisi yazdığı zorunlu bir alandır. 3–32 karakter olmalı ve yalnızca harf, rakam, `.` ve `_` içermelidir. Hesap bağlama/OAuth akışı, bot, DM bildirimi ve ek bir Discord ayarı kullanılmaz; bu değer yalnızca başvuru kaydında saklanır.
 
 ---
 
@@ -243,14 +206,10 @@ DM başarısızlığı kararı geçersiz kılmaz; hata kuyruğa yazılır ve pan
 | --- | --- | --- |
 | `SUPABASE_URL` | tümü | `VITE_SUPABASE_URL` yedeği okunur. |
 | `SUPABASE_SERVICE_ROLE_KEY` | tümü | Yalnızca Edge; RLS'yi atlar. |
-| `SESSION_SECRET` | `admin-auth`, `discord-oauth`, dolayısıyla tüm yönetici uçları | Oturum HMAC + OAuth state özeti + Discord bağlantı belirteci imzası. |
+| `SESSION_SECRET` | `admin-auth` ve dolayısıyla tüm yönetici uçları | Oturum HMAC imzası. |
 | `ADMIN_SETUP_SECRET` | `admin-auth` | `x-admin-setup-secret` başlığıyla karşılaştırılır; yoksa `setup` eylemi kapalıdır. |
 | `RATE_LIMIT_SALT` | `submit-application` | IP özetleme tuzu. |
-| `ALLOWED_ORIGINS` | tümü (CORS), `discord-oauth` (dönüş) | Virgülle ayrılmış origin listesi. |
-| `DISCORD_CLIENT_ID` | `discord-oauth` | OAuth2. |
-| `DISCORD_CLIENT_SECRET` | `discord-oauth` | Token değişimi. |
-| `DISCORD_REDIRECT_URI` | `discord-oauth` | Callback URL'si. |
-| `DISCORD_BOT_TOKEN` | `discord-notify` | DM gönderimi. |
+| `ALLOWED_ORIGINS` | tümü (CORS) | Virgülle ayrılmış origin listesi. |
 
 Bu değerler hiçbir yanıta, istemci paketine veya GitHub Actions dosyasına yazılmaz. Döndürme (rotation) ve saklama kuralları: [guvenlik.md](guvenlik.md).
 
@@ -263,20 +222,19 @@ supabase secrets set SUPABASE_URL=<...> SUPABASE_SERVICE_ROLE_KEY=<...> SESSION_
   ADMIN_SETUP_SECRET=<edge-kurulum-ici-rastgele-deger>
 
 for fn in admin-auth admin-applications admin-questions admin-positions \
-          admin-scores admin-settings public-status submit-application \
-          discord-oauth discord-notify; do
+          admin-scores admin-settings public-status submit-application; do
   supabase functions deploy "$fn" --no-verify-jwt
 done
 
 supabase functions list        # dağıtılan uçları ve sürümleri görür
 ```
 
-`--no-verify-jwt`: kimlik doğrulama uçların içinde (oturum çerezi / OAuth state / hız sınırı) yapıldığı için Gateway JWT doğrulaması kapatılır. Yeni secret değeri uçların davranışını anında etkiler; kod değişikliğinde ilgili ucu yeniden dağıtın.
+`--no-verify-jwt`: kimlik doğrulama uçların içinde (oturum çerezi / hız sınırı) yapıldığı için Gateway JWT doğrulaması kapatılır. Yeni secret değeri uçların davranışını anında etkiler; kod değişikliğinde ilgili ucu yeniden dağıtın.
 
 ## Loglama ve izleme
 
 - Supabase Dashboard → **Edge Functions → <uç-adı> → Logs**: istek durum kodları, `configuration` (503) ve `csrf` (403) gibi hata kodları görülebilir.
-- Supabase Dashboard → **Database → Table Editor**: `audit_logs` (salt okunur), `application_history`, `notification_queue`, `rate_limits` tabloları operasyonel izleme için kullanılabilir.
+- Supabase Dashboard → **Database → Table Editor**: `audit_logs` (salt okunur), `application_history`, `rate_limits` tabloları operasyonel izleme için kullanılabilir.
 - Başarısız Edge isteklerinde yanıt gövdesi `{"ok":false,"error":"...","code":"..."}` biçimindedir; `code` değeri loglarla eşleştirilebilir.
-- Ham parola, oturum belirteci, `service_role` anahtarı, bot token ve Discord erişim belirteci loglara yazılmaz. Kullanıcıya dönen hata mesajları geneldir.
-- Yüksek hacimde `rate_limits` ve `notification_queue` temizliği için `0003_functions_triggers.sql` içindeki `cleanup_old_rate_limits()` / `cleanup_expired_sessions()` yardımcıları kullanılabilir.
+- Ham parola, oturum belirteci ve `service_role` anahtarı loglara yazılmaz. Kullanıcıya dönen hata mesajları geneldir.
+- Yüksek hacimde `rate_limits` ve eski oturum kayıtlarının temizliği için `0003_functions_triggers.sql` içindeki `cleanup_old_rate_limits()` / `cleanup_expired_sessions()` yardımcıları kullanılabilir.

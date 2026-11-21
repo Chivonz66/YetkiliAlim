@@ -1,9 +1,10 @@
 -- Luminacraft Staff Center — canlı veritabanı için ileriye dönük uzlaştırma göçü
 --
 -- 0001/0003/0004 dosyaları ilk dağıtımdan sonra düzenlendiği için, zaten uygulanmış
--- bir veritabanının bu değişiklikleri alması gerekir. 0005_submit_atomic.sql ve
--- 0006_decision_notify.sql ayrı ve bağımsız dosyalardır; bu dosya onları tekrar
--- tanımlamaz. Yeni kurulumlarda 0001→0007 sırasıyla uygulanır.
+-- bir veritabanının bu değişiklikleri alması gerekir. 0005_submit_atomic.sql
+-- atomik gönderimi tanımlar; 0006_decision_notify.sql artık yer tutucudur ve
+-- Discord bildirimleri 0009 ile kaldırılır. Bu dosya onları tekrar tanımlamaz.
+-- Yeni kurulumlarda 0001→0009 sırasıyla uygulanır.
 
 -- Yaş aralığı 16–99; mevcut satırların denetimi ihlal etmediğinden emin ol.
 DO $$

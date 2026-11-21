@@ -40,7 +40,7 @@ Dosya: `.github/workflows/deploy-luminacraft-staff-center.yml` (depo kökünde; 
 
 **404.html notu:** Vite, `public/404.html` dosyasını derleme sırasında otomatik olarak `dist/404.html` içine kopyalar. İş akışındaki Node adımı yalnızca bu dosya yoksa `dist/index.html` dosyasını `dist/404.html` olarak yedekler; böylece `public/404.html` içindeki SPA yönlendirme betiği dağıtımda korunur. Sır: derleme → 404 kontrolü → Pages artefaktı.
 
-**Sır yok:** İş akışında Supabase, Discord veya oturum gizli anahtarı bulunmaz. Frontend yalnızca `VITE_` ön ekli, herkese açık değerleri derler; `service_role` ve bot token yalnızca Supabase Edge Secrets'ta tutulur.
+**Sır yok:** İş akışında Supabase veya oturum gizli anahtarı bulunmaz. Frontend yalnızca `VITE_` ön ekli, herkese açık değerleri derler; `service_role` yalnızca Supabase Edge Secrets'ta tutulur.
 
 ## 4. SPA 404 yönlendirmesi neden gerekli?
 
@@ -93,4 +93,4 @@ Yalnızca `LuminacraftStaffCenter/**` veya iş akışı dosyasında değişiklik
 | Derin linkte 404 ekranı | `public/404.html` değiştirilmiş veya kodlama dizeleri index ile uyuşmuyor | İki dosyadaki `?/` / `encodeURIComponent(path)` / `decodeURIComponent(search.slice(1))` dizelerini eşitleyin. |
 | `Resource not accessible by integration` | Pages izinleri eksik | İş akışındaki `pages: write` ve `id-token: write` izinlerini koruyun; Actions ayarlarında workflow izinlerini kontrol edin. |
 | Ambardaki eski sürüm görünüyor | Tarayıcı önbelleği | Sert yenileme (Ctrl+F5) yapın; dağıtımın timestamps'ini Actions sekmesinden doğrulayın. |
-| Kodda gizli anahtar görünüyor | `service_role`/bot token `.env` veya iş akışına yazıldı | Anahtarları Supabase Dashboard'dan döndürün (rotate), dosyalardan çıkarın, geçmişi temizleyin. Bkz. [guvenlik.md](guvenlik.md). |
+| Kodda gizli anahtar görünüyor | `service_role` `.env` veya iş akışına yazıldı | Anahtarları Supabase Dashboard'dan döndürün (rotate), dosyalardan çıkarın, geçmişi temizleyin. Bkz. [guvenlik.md](guvenlik.md). |

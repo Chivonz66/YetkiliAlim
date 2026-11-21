@@ -18,7 +18,6 @@ describe('Ayarlar - saatlik başvuru sınırı doğrulaması', () => {
       closed_message: 'Kapalı.',
       rate_limit_per_ip_per_hour: 5,
       site_title: 'Luminacraft Staff Center',
-      discord_enabled: false,
     })
     vi.mocked(updateSettings).mockResolvedValue({})
   })
@@ -48,5 +47,15 @@ describe('Ayarlar - saatlik başvuru sınırı doğrulaması', () => {
       expect(screen.getByText('Hız sınırı 1 ile 1000 arasında olmalıdır.')).toBeTruthy()
     })
     expect(updateSettings).not.toHaveBeenCalled()
+  })
+
+  it('Discord bağlama veya bildirim ayarı göstermez', async () => {
+    render(
+      <AdminToastProvider>
+        <SettingsPage />
+      </AdminToastProvider>,
+    )
+    await screen.findByLabelText('Saatlik başvuru sınırı (IP)')
+    expect(screen.queryByText(/discord/i)).toBeNull()
   })
 })

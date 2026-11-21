@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom'
 import {
   AlertTriangle,
   ArrowLeft,
-  BellRing,
   CalendarDays,
   CheckCircle2,
   Circle,
@@ -45,28 +44,10 @@ function statusMeta(status?: string) {
   return { label: found?.label ?? 'Durum bilinmiyor', description: found?.description ?? '', variant }
 }
 
-function discordMeta(result: StatusLookupResponse): { label: string; variant: BadgeVariant } {
-  const notification = result.discord_notification
-  const state =
-    typeof notification === 'string'
-      ? notification
-      : notification && typeof notification === 'object'
-        ? notification.status
-        : undefined
-
-  if (state === 'sent' || result.discord_notified === true) {
-    return { label: 'Discord bildirimi gönderildi', variant: 'success' }
-  }
-  if (state === 'failed') return { label: 'Discord bildirimi iletilemedi', variant: 'danger' }
-  if (state === 'pending') return { label: 'Discord bildirimi hazırlanıyor', variant: 'warning' }
-  return { label: 'Henüz bir Discord bildirimi yok', variant: 'default' }
-}
-
 /** Yalnızca başvuruya ait genel alanları gösterir; özel not ve puanlar asla render edilmez. */
 function ResultCard({ result, trackingNo }: { result: StatusLookupResponse; trackingNo: string }) {
   const current = stageIndex(result.status)
   const meta = statusMeta(result.status)
-  const discord = discordMeta(result)
   const decisionDate = result.decision_date || result.reviewed_at || null
   const accepted = result.status === 'accepted'
   const rejected = result.status === 'rejected'
@@ -133,12 +114,6 @@ function ResultCard({ result, trackingNo }: { result: StatusLookupResponse; trac
             <p className="mt-1 text-sm text-slate-200">
               {decisionDate ? formatDateTime(decisionDate) : 'Henüz karar verilmedi'}
             </p>
-          </div>
-          <div className="rounded-lg border border-white/5 bg-obsidian-900/50 px-4 py-3 sm:col-span-2">
-            <p className="flex items-center gap-2 text-xs text-slate-500">
-              <BellRing size={14} aria-hidden="true" /> Bildirim durumu
-            </p>
-            <Badge variant={discord.variant} className="mt-2">{discord.label}</Badge>
           </div>
         </div>
 
@@ -255,7 +230,7 @@ export function StatusPage() {
             <ol className="mt-3 space-y-2 text-sm text-slate-400">
               <li className="flex gap-2"><span className="font-mono text-emerald-350">01</span> Başvuru numaranı ve sorgu kodunu gir.</li>
               <li className="flex gap-2"><span className="font-mono text-emerald-350">02</span> Başvurunun hangi aşamada olduğunu gör.</li>
-              <li className="flex gap-2"><span className="font-mono text-emerald-350">03</span> Karar verildiğinde tarih ve bildirim durumunu incele.</li>
+              <li className="flex gap-2"><span className="font-mono text-emerald-350">03</span> Karar verildiğinde tarih ve durum bilgisini incele.</li>
             </ol>
           </div>
         )}

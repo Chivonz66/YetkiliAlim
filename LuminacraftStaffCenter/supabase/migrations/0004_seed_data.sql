@@ -38,7 +38,7 @@ VALUES
    true, true, 10, 3, 32, NULL, NULL, '[]'::jsonb),
 
   ('10000000-0000-4000-8000-000000000002', '00000000-0000-4000-8000-000000000001', NULL,
-   'Discord kullanıcı adın nedir?', 'Örnek: luminacraft#1234', 'short_text',
+   'Discord kullanıcı adın nedir?', 'Örnek: luminacraft', 'short_text',
    true, true, 20, 3, 32, NULL, NULL, '[]'::jsonb),
 
   ('10000000-0000-4000-8000-000000000003', '00000000-0000-4000-8000-000000000001', NULL,
@@ -121,7 +121,6 @@ INSERT INTO public.app_settings (key, value) VALUES
   ('site_title', '"Luminacraft Staff Center"'::jsonb),
   ('applications_open', 'true'::jsonb),
   ('closed_message', '"Başvurular şu anda kapalıdır. Lütfen daha sonra tekrar deneyin."'::jsonb),
-  ('discord_enabled', 'false'::jsonb),
   ('min_minecraft_age_months', '12'::jsonb),
   ('rate_limit_per_ip_per_hour', '5'::jsonb)
 ON CONFLICT (key) DO NOTHING;

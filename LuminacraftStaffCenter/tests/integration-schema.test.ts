@@ -6,8 +6,6 @@ import type {
   ApplicationAnswer,
   ApplicationHistory,
   ApplicationScore,
-  DiscordLink,
-  DiscordNotification,
   Question,
 } from '../src/types'
 
@@ -46,7 +44,8 @@ describe('Edge Function veritabanı sözleşmesi', () => {
     expect(code).toContain('p_window_start: windowStart.toISOString()')
     expect(code).toContain('p_limit: limit')
     expect(code).toContain('p_answers: answerRows')
-    expect(code).toContain('p_discord_user_id: discordLink?.userId ?? null')
+    expect(code).not.toContain('p_discord_user_id')
+    expect(code).not.toContain('discord_link_token')
     expect(code).not.toMatch(/\.from\('rate_limits'\)/)
     expect(code).not.toMatch(/\.from\('applications'\)\s*\.insert/)
     expect(code).not.toMatch(/\.from\('application_answers'\)\s*\.insert/)
@@ -70,11 +69,11 @@ describe('Edge Function veritabanı sözleşmesi', () => {
       'status',
       'submitted_at',
       'decided_at',
-      'notification_status',
       'status_history',
     ]) {
       expect(code, alan).toContain(`'${alan}'`)
     }
+    expect(code).not.toContain("'notification_status'")
     expect(code).toContain('safe.decision_date = safe.decided_at')
     expect(code).not.toContain("'query_token'")
     expect(code).not.toMatch(/safe\.query_token\s*=/)
@@ -88,9 +87,10 @@ describe('Edge Function veritabanı sözleşmesi', () => {
     expect(code).toContain('decided_at: new Date().toISOString()')
     expect(code).toContain('decided_by: auth.adminId')
     expect(code).not.toMatch(/from\('application_history'\)\s*\.insert/)
-    expect(code).toContain("from('notification_queue').insert")
-    expect(code).toContain("status: 'pending'")
-    expect(code).toContain("notification_status: 'pending'")
+    expect(code).toContain("client.rpc('apply_application_decision'")
+    expect(code).not.toContain("from('notification_queue')")
+    expect(code).not.toContain('notification_status')
+    expect(code).not.toContain('discord_enabled')
   })
 
   it('puanlar criterion_key ve weight_snapshot ile tek satıra yazılır', () => {
@@ -130,45 +130,36 @@ describe('Edge Function veritabanı sözleşmesi', () => {
     expect(code).not.toContain('updated_by')
   })
 
-  it('Discord bildirim kuyruğu attempts, last_error ve sent_at kullanır', () => {
-    const code = kod(`${EDGE}/discord-notify/index.ts`)
-    expect(code).toContain('last_error: message')
-    expect(code).toContain('attempts,')
-    expect(code).toContain('sent_at: status ===')
-    expect(code).toContain('canRetryNotification(found.data.status)')
-    expect(code).toContain('Yalnızca başarısız bildirimler yeniden gönderilebilir.')
-    expect(code).not.toMatch(/\.from\('applications'\)\s*\.update\(\{\s*status/)
+  it('discord-oauth ve discord-notify uçları kaldırıldı', () => {
+    expect(existsSync(join(kok, `${EDGE}/discord-oauth/index.ts`))).toBe(false)
+    expect(existsSync(join(kok, `${EDGE}/discord-notify/index.ts`))).toBe(false)
+
+    const kaynaklar = [
+      `${EDGE}/submit-application/index.ts`,
+      `${EDGE}/admin-applications/index.ts`,
+      `${EDGE}/public-status/index.ts`,
+      `${EDGE}/admin-settings/index.ts`,
+      `${EDGE}/_shared/auth.ts`,
+      `${EDGE}/_shared/db.ts`,
+      `${EDGE}/_shared/pure.ts`,
+      `${EDGE}/_shared/validation.ts`,
+    ]
+    for (const dosya of kaynaklar) {
+      expect(kod(dosya), dosya).not.toMatch(
+        /discord-oauth|discord-notify|discord_link_token|discord_user_id|discord_connected|discord_enabled|oauth_state_hash|notification_queue|notification_status|canRetryNotification/i,
+      )
+    }
   })
 
-  it('Discord OAuth durumu imzalanır ve doğal anahtarla kaydedilir', () => {
-    const code = kod(`${EDGE}/discord-oauth/index.ts`)
-    expect(code).toContain("env('SESSION_SECRET')")
-    expect(code).toContain('hmacSha256Hex')
-    expect(code).toContain('oauth_state_hash: hash')
-    expect(code).toContain("onConflict: 'discord_user_id'")
-    expect(code).toContain("eq('oauth_state_hash', hash)")
-    expect(code).not.toMatch(/\bstate_hash\s*:|\bdiscord_id\s*:/)
-  })
-
-  it('Discord OAuth bağlantısı imzalı belirteçle sınırlıdır ve application_id kabul etmez', () => {
-    const code = kod(`${EDGE}/discord-oauth/index.ts`)
-    expect(code).toContain('signSessionToken')
-    expect(code).toContain('verifySessionToken')
-    expect(code).toContain('discord_link_token')
-    expect(code).toContain("verifyLinkToken(url.searchParams.get('discord_link_token'), 'pending', secret)")
-    expect(code).toContain('createLinkToken(discordUserId, \'bound\', secret)')
-    expect(code).toContain("destination.searchParams.set('discord_link_token', boundToken)")
-    expect(code).toContain("requireAdmin(req, { csrf: false })")
-    expect(code).not.toContain("url.searchParams.get('application_id')")
-    expect(code).not.toContain('applicationIdFrom(returnTo, ')
-  })
-
-  it('başvuru gönderimi pozisyon açıklığını ve Discord belirtecini sunucuda doğrular', () => {
+  it('başvuru gönderimi pozisyon açıklığını ve zorunlu Discord adını sunucuda doğrular', () => {
     const code = kod(`${EDGE}/submit-application/index.ts`)
+    const validation = kod(`${EDGE}/_shared/validation.ts`)
     expect(code).toContain('${data.position_slug}_applications_open')
     expect(code).toContain("'position_closed'")
-    expect(code).toContain('verifySessionToken(token, secret)')
-    expect(code).toContain("payload.nonce.startsWith('discord-link:bound:')")
+    expect(code).toContain('applicant_discord_username: discord')
+    expect(validation).toContain('Discord kullanıcı adı zorunludur.')
+    expect(validation).toContain('/^[A-Za-z0-9_.]{3,32}$/')
+    expect(code).not.toMatch(/verifySessionToken|discord-link:|discord_link_token/)
     expect(code).toContain('values.length > 0 && typeof answer ===')
     expect(code).not.toMatch(/values\.length === 0 \|\|/)
   })
@@ -181,8 +172,21 @@ describe('Edge Function veritabanı sözleşmesi', () => {
     expect(sql).toContain('INSERT INTO public.application_answers (')
     expect(sql).toContain('ON CONFLICT (key, window_start)')
     expect(sql).toContain('RETURNING hit_count INTO v_hit_count')
-    expect(sql).toContain('application_id = EXCLUDED.application_id')
+    expect(sql).toContain('p_application jsonb,')
+    expect(sql).toContain('p_answers jsonb')
+    expect(sql).not.toContain('discord_links')
+    expect(sql).not.toContain('notification_queue')
     expect(sql).toMatch(/SECURITY DEFINER/)
+  })
+
+  it('0009 göçü eski Discord/DM nesnelerini kaldırır ve durum sorgusunu sadeleştirir', () => {
+    const sql = oku('supabase/migrations/0009_remove_discord_integrations.sql')
+    expect(sql).toContain('DROP TABLE IF EXISTS public.discord_links')
+    expect(sql).toContain('DROP TABLE IF EXISTS public.notification_queue')
+    expect(sql).toContain('DROP COLUMN IF EXISTS notification_status')
+    expect(sql).toContain('CREATE OR REPLACE FUNCTION public.lookup_application(')
+    expect(sql).not.toMatch(/\bnotification_status text\b/)
+    expect(sql).not.toMatch(/INSERT INTO public\.(discord_links|notification_queue)/)
   })
 
   it('denetim yazımı audit_logs şema sütunlarını kullanır', () => {
@@ -206,8 +210,7 @@ describe('paylaşılan tipler ve yönetici arayüzü', () => {
       true satisfies AlanVar<ApplicationScore, 'criterion_key'>,
       true satisfies AlanVar<ApplicationScore, 'weight_snapshot'>,
       true satisfies AlanVar<ApplicationHistory, 'actor'>,
-      true satisfies AlanVar<DiscordNotification, 'last_error'>,
-      true satisfies AlanVar<DiscordLink, 'oauth_state_hash'>,
+      true satisfies AlanVar<Application, 'applicant_discord_username'>,
       true satisfies AlanVar<Question, 'type'>,
     ]
     const yokMu: Array<false> = [
@@ -215,10 +218,10 @@ describe('paylaşılan tipler ve yönetici arayüzü', () => {
       false satisfies AlanVar<ApplicationAnswer, 'answer_text'>,
       false satisfies AlanVar<ApplicationScore, 'criterion'>,
       false satisfies AlanVar<ApplicationHistory, 'changed_by'>,
-      false satisfies AlanVar<DiscordNotification, 'error_message'>,
-      false satisfies AlanVar<DiscordLink, 'state_hash'>,
+      false satisfies AlanVar<Application, 'discord_user_id'>,
+      false satisfies AlanVar<Application, 'notification_status'>,
     ]
-    expect(varMi).toHaveLength(10)
+    expect(varMi).toHaveLength(9)
     expect(yokMu).toHaveLength(6)
   })
 
@@ -228,8 +231,9 @@ describe('paylaşılan tipler ve yönetici arayüzü', () => {
     const scores = kod('src/components/admin/ScorePanel.tsx')
     const timeline = kod('src/components/admin/AuditTimeline.tsx')
     expect(detail).toContain('application.applicant_minecraft_username')
+    expect(detail).toContain('application.applicant_discord_username')
     expect(detail).toContain('answer.value')
-    expect(detail).toContain('item.last_error')
+    expect(detail).not.toMatch(/notification_status|discord_user_id|Discord bildirimi/i)
     expect(table).toContain("'applicant_minecraft_username'")
     expect(table).toContain("'submitted_at'")
     expect(scores).toContain('score.criterion_key')
@@ -246,7 +250,6 @@ describe('paylaşılan tipler ve yönetici arayüzü', () => {
       `${EDGE}/admin-questions/index.ts`,
       `${EDGE}/admin-positions/index.ts`,
       `${EDGE}/admin-settings/index.ts`,
-      `${EDGE}/discord-notify/index.ts`,
       `${EDGE}/public-status/index.ts`,
       'src/types/index.ts',
       'src/pages/admin/ApplicationDetailPage.tsx',
@@ -263,6 +266,9 @@ describe('paylaşılan tipler ve yönetici arayüzü', () => {
       'changed_by',
       'discord_id',
       'state_hash',
+      'discord_user_id',
+      'discord_connected',
+      'notification_status',
     ]
     for (const dosya of dosyalar) {
       const source = kod(dosya)
@@ -276,42 +282,6 @@ describe('paylaşılan tipler ve yönetici arayüzü', () => {
     const home = kod('src/pages/HomePage.tsx')
     expect(home).toContain("import type { LucideIcon } from 'lucide-react'")
     expect(home).toContain('Record<PositionSlug, LucideIcon>')
-  })
-})
-
-describe('Discord bildirimi yeniden gönderimi', () => {
-  const detayKodu = (): string => kod('src/pages/admin/ApplicationDetailPage.tsx')
-
-  /** handleNotification gövdesini metin olarak ayıklar. */
-  const gonderimKodu = (): string => {
-    const kaynak = detayKodu()
-    const baslangic = kaynak.indexOf('const handleNotification = async () => {')
-    expect(baslangic, 'handleNotification bulunamadı').toBeGreaterThanOrEqual(0)
-    const bitis = kaynak.indexOf('\n  if (loading)', baslangic)
-    expect(bitis, 'handleNotification sonu bulunamadı').toBeGreaterThan(baslangic)
-    return kaynak.slice(baslangic, bitis)
-  }
-
-  it('bekleyen veya gönderilen bildirimi retry için yedek olarak kullanmaz', () => {
-    const kaynak = detayKodu()
-    expect(kaynak).not.toContain('?? notifications[0]')
-    expect(kaynak).toContain("status === 'failed'")
-    expect(kaynak).toContain('failedNotifications')
-  })
-
-  it('başarısız bildirim varsa retry, yoksa ilk gönderimi çağırır', () => {
-    const handler = gonderimKodu()
-    expect(handler).toContain('retryNotification(')
-    expect(handler).toContain('sendNotification(')
-    expect(handler).toMatch(/lastFailed\s*\?\s*await retryNotification\(/)
-    expect(handler).toMatch(/:\s*await sendNotification\(/)
-  })
-
-  it('yeniden gönderim ve ilk gönderim için doğru Türkçe sonuç mesajları üretir', () => {
-    const handler = gonderimKodu()
-    expect(handler).toContain('Bildirim yeniden gönderildi.')
-    expect(handler).toContain('Bildirim gönderildi.')
-    expect(handler).toContain('isRetry ?')
   })
 })
 
@@ -332,7 +302,9 @@ it('SQL şeması kaynak metin olarak doğrulanır; canlı bağlantı gerekmez', 
   }
   expect(sema).toContain('question_type')
   expect(sema).toContain('weight_snapshot')
-  expect(sema).toContain('oauth_state_hash')
+  expect(sema).not.toContain('oauth_state_hash')
+  expect(sema).not.toContain('notification_status')
   expect(guvenlik).toContain('lookup_application')
   expect(guvenlik).toContain('p_query_token')
+  expect(guvenlik).not.toContain('notification_status')
 })

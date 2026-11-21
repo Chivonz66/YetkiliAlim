@@ -2,7 +2,7 @@
 
 Bu kılavuz, Luminacraft Staff Center'ı **sıfırdan çalışır hale getirmek** için gereken adımları içerir. Uygulama mock veri kullanmaz: Supabase projesi, göçler, Edge Functions ve ilk yönetici olmadan hiçbir ekran gerçek veri göstermez.
 
-Toplam süre: yaklaşık 20–30 dakika. Gereksinimler: Node.js 20+, npm, bir Supabase hesabı ve (Edge dağıtımı için) Supabase CLI, ayrıca Discord entegrasyonu istenirse bir Discord uygulaması/botu.
+Toplam süre: yaklaşık 20–30 dakika. Gereksinimler: Node.js 20+, npm, bir Supabase hesabı ve (Edge dağıtımı için) Supabase CLI.
 
 ---
 
@@ -18,25 +18,26 @@ Toplam süre: yaklaşık 20–30 dakika. Gereksinimler: Node.js 20+, npm, bir Su
 
 ## 2. Migrations dosyalarını sırayla uygula
 
-Sekiz SQL dosyası `LuminacraftStaffCenter/supabase/migrations/` altındadır. **Sıra önemlidir**; şema → RLS → fonksiyon/tetikleyici → tohum veri → atomik başvuru → bildirim tekilleştirme → canlı uzlaştırma → pozisyon ayarı izni.
+Dokuz SQL dosyası `LuminacraftStaffCenter/supabase/migrations/` altındadır. **Sıra önemlidir**; şema → RLS → fonksiyon/tetikleyici → tohum veri → atomik başvuru → yer tutucu göç → canlı uzlaştırma → pozisyon ayarı izni → eski Discord/DM nesnelerinin kaldırılması.
 
 | Sıra | Dosya | Ne yapar |
 | --- | --- | --- |
-| 1 | `0001_initial_schema.sql` | `pgcrypto` uzantısı, 17 tablo (`positions`, `questions`, `applications`, `admins`, `admin_sessions`, `app_settings`, `rate_limits`, `discord_links`, `notification_queue`, `audit_logs` vb.), indeksler, yaş 16–99 denetimi ve `create_first_admin` RPC'si. |
+| 1 | `0001_initial_schema.sql` | `pgcrypto` uzantısı, tablolar (`positions`, `questions`, `applications`, `admins`, `admin_sessions`, `app_settings`, `rate_limits`, `audit_logs` vb.), indeksler, yaş 16–99 denetimi ve `create_first_admin` RPC'si. |
 | 2 | `0002_rls_policies.sql` | Tüm tablolar için RLS; anon'a yalnızca etkin soru/pozisyon/kategori/ölçüt okuma; `lookup_application` ve `get_public_questions` RPC'leri. |
 | 3 | `0003_functions_triggers.sql` | `updated_at`, takip numarası, durum geçişi geçmişi, salt okunur denetim günlüğü, puan bütünlüğü, temizleme fonksiyonları ve `apply_application_decision` RPC'si. |
 | 4 | `0004_seed_data.sql` | 2 pozisyon, 5 kategori, 6 puan ölçütü (ağırlık toplamı 100), 13 soru, seçenekler ve varsayılan `app_settings` (yaş sorusu 16–99). |
 | 5 | `0005_submit_atomic.sql` | `submit_application_atomic(...)` ve atomik `increment_rate_limit(...)` RPC'leri. |
-| 6 | `0006_decision_notify.sql` | Bildirim kuyruğunda tekilleştirme anahtarı, tek bekleyen satır garantisi ve `claim_pending_notification` / `claim_failed_notification` RPC'leri. |
+| 6 | `0006_decision_notify.sql` | Artık çalıştırılacak SQL içermeyen **yer tutucu** göç; göç sırasının bozulmaması için korunur. |
 | 7 | `0007_live_reconciliation.sql` | İlk dağıtımdan sonra düzenlenen 0001/0003/0004 değişikliklerini zaten uygulanmış veritabanına ileriye dönük olarak taşır. |
 | 8 | `0008_public_position_settings.sql` | `${slug}_applications_open` ayarlarının herkese açık okunmasını sağlayan RLS politikası. |
+| 9 | `0009_remove_discord_integrations.sql` | Eski Discord hesap bağlama ve DM bildirim nesnelerini (tablolar, sütunlar, RPC'ler ve ayar) kaldırır; zorunlu Discord kullanıcı adı alanını 3–32 karakter kuralıyla korur. Mevcut veritabanında tek başına da uygulanabilir. |
 
 **Yöntem A — Supabase SQL Editor (önerilen):**
 
 1. Supabase Dashboard → **SQL Editor → New query**.
 2. `0001_initial_schema.sql` içeriğini yapıştırın → **Run**. "Success" görmeden sonraki dosyaya geçmeyin.
-3. Aynı işlemi `0002`, `0003`, `0004`, `0005`, `0006`, `0007`, `0008` için sırayla yapın.
-4. Tohum veri (`0004`) `ON CONFLICT DO NOTHING` kullanır; dosyayı birden fazla kez çalıştırmak veri çoğaltmaz. `0007`, mevcut yaş sorusunu 16–99 olarak günceller.
+3. Aynı işlemi `0002`, `0003`, `0004`, `0005`, `0006`, `0007`, `0008`, `0009` için sırayla yapın. `0006` yer tutucudur, hatasız çalışır.
+4. Tohum veri (`0004`) `ON CONFLICT DO NOTHING` kullanır; dosyayı birden fazla kez çalıştırmak veri çoğaltmaz. `0007`, mevcut yaş sorusunu 16–99 olarak günceller. `0009` tekrar çalıştırılabilir (idempotent).
 
 **Yöntem B — psql (yerel/CLI):**
 
@@ -50,6 +51,7 @@ psql "$DATABASE_URL" -f supabase/migrations/0005_submit_atomic.sql
 psql "$DATABASE_URL" -f supabase/migrations/0006_decision_notify.sql
 psql "$DATABASE_URL" -f supabase/migrations/0007_live_reconciliation.sql
 psql "$DATABASE_URL" -f supabase/migrations/0008_public_position_settings.sql
+psql "$DATABASE_URL" -f supabase/migrations/0009_remove_discord_integrations.sql
 ```
 
 > Bu dosyalar Supabase CLI'nin zaman damgalı göç adlandırmasını kullanmaz; bu yüzden `supabase db push` yerine yukarıdaki sıralı yöntemlerden birini kullanın.
@@ -79,7 +81,7 @@ VITE_BASE_PATH=/
 ```
 
 - Yerel geliştirmede `VITE_BASE_PATH=/` kalabilir. GitHub Pages iş akışı bunu otomatik olarak `/DEPO-ADI/` yapar; elle değiştirmeyin.
-- `.env` dosyası `.gitignore` ile kapsanır. İçine `service_role`, bot token veya parola **koymayın**; `VITE_` ön eki bu değerleri tarayıcı paketine gömer.
+- `.env` dosyası `.gitignore` ile kapsanır. İçine `service_role`, parola veya başka bir sır **koymayın**; `VITE_` ön eki bu değerleri tarayıcı paketine gömer.
 - Değişiklikten sonra dev sunucusunu yeniden başlatın.
 
 ## 4. İlk yöneticiyi oluştur (zorunlu)
@@ -125,14 +127,10 @@ Kodda gerçekten okunan değişkenler bunlardır (`_shared/db.ts`, `_shared/auth
 | --- | --- | --- |
 | `SUPABASE_URL` | Evet | Tüm uçlarda veritabanı istemcisi (`VITE_SUPABASE_URL` yedek). |
 | `SUPABASE_SERVICE_ROLE_KEY` | Evet | Tüm uçlarda yazma/silinme işlemleri; yalnızca sunucu. |
-| `SESSION_SECRET` | Evet | `admin-auth` oturum imzası (HMAC-SHA256), `discord-oauth` `state` özeti. Uzun rastgele bir değer kullanın. |
+| `SESSION_SECRET` | Evet | `admin-auth` oturum imzası (HMAC-SHA256). Uzun rastgele bir değer kullanın. |
 | `ADMIN_SETUP_SECRET` | Edge `setup` kullanılacaksa | `admin-auth` kurulum eyleminin `x-admin-setup-secret` başlığıyla karşılaştırdığı değer. Tanımlı değilse `setup` kapalıdır; CLI kurulumundan sonra gerekmez. |
 | `RATE_LIMIT_SALT` | Önerilir | `submit-application` IP özetleme tuzu; ham IP saklanmaz. |
-| `ALLOWED_ORIGINS` | Üretimde evet | `_shared/cors.ts` allowlist'i ve OAuth sonrası güvenli dönüş adresi. Örn. `https://KULLANICI.github.io,http://localhost:5173`. |
-| `DISCORD_CLIENT_ID` | Discord ise | OAuth2 başlatma ve token değişimi. |
-| `DISCORD_CLIENT_SECRET` | Discord ise | Yalnızca Edge'de token değişimi. |
-| `DISCORD_REDIRECT_URI` | Discord ise | Callback adresi; [discord-oauth.md](discord-oauth.md) ile aynı olmalı. |
-| `DISCORD_BOT_TOKEN` | DM ise | `discord-notify` DM gönderimi; yalnızca Edge'de. |
+| `ALLOWED_ORIGINS` | Üretimde evet | `_shared/cors.ts` allowlist'i. Örn. `https://KULLANICI.github.io,http://localhost:5173`. |
 
 Örnek (değerler placeholder'dır):
 
@@ -148,16 +146,15 @@ supabase secrets set \
   ALLOWED_ORIGINS=https://KULLANICI.github.io,http://localhost:5173
 ```
 
-Discord kullanacaksanız aynı komuta `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `DISCORD_REDIRECT_URI`, `DISCORD_BOT_TOKEN` değerlerini de ekleyin. `supabase secrets list` yalnızca anahtar adlarını gösterir; değerleri göstermez. Gizli anahtarları bir kez daha görmeniz gerekirse Supabase Dashboard → Project Settings → Edge Functions → Secrets kullanın.
+Discord kullanıcı adı düz metin bir başvuru alanı olduğu için Discord'a ait ek bir gizli anahtar yoktur. `supabase secrets list` yalnızca anahtar adlarını gösterir; değerleri göstermez. Gizli anahtarları bir kez daha görmeniz gerekirse Supabase Dashboard → Project Settings → Edge Functions → Secrets kullanın.
 
 ## 6. Edge Functions uçlarını dağıt
 
-On uç vardır; hepsi özel oturum çerezi kullandığı için `--no-verify-jwt` ile dağıtılır (kimlik doğrulama fonksiyonun içinde yapılır).
+Sekiz uç vardır; hepsi özel oturum çerezi kullandığı için `--no-verify-jwt` ile dağıtılır (kimlik doğrulama fonksiyonun içinde yapılır).
 
 ```bash
 for fn in admin-auth admin-applications admin-questions admin-positions \
-          admin-scores admin-settings public-status submit-application \
-          discord-oauth discord-notify; do
+          admin-scores admin-settings public-status submit-application; do
   supabase functions deploy "$fn" --no-verify-jwt
 done
 ```
@@ -166,16 +163,15 @@ Windows PowerShell:
 
 ```powershell
 $ucLar = @('admin-auth','admin-applications','admin-questions','admin-positions',
-           'admin-scores','admin-settings','public-status','submit-application',
-           'discord-oauth','discord-notify')
+           'admin-scores','admin-settings','public-status','submit-application')
 foreach ($uc in $ucLar) { supabase functions deploy $uc --no-verify-jwt }
 ```
 
 Her uç için amaç, eylem adları, istek/yanıt örnekleri ve log ipuçları: [edge-functions.md](edge-functions.md).
 
-## 7. Discord kurulumu (opsiyonel)
+## 7. Discord kullanıcı adı
 
-Discord uygulaması oluşturma, OAuth2 yönlendirme URL'si, bot ve izinler için [discord-oauth.md](discord-oauth.md) belgesini izleyin. Özetle: callback adresi `<SUPABASE_URL>/functions/v1/discord-oauth?action=callback` olmalı, `DISCORD_REDIRECT_URI` birebir aynı değeri taşımalı, bot belirteci yalnızca Edge ortamında tutulmalıdır. Bu adım atlanırsa başvuru ve yönetim akışı çalışmaya devam eder; yalnızca Discord bağlama/DM özellikleri devre dışı kalır (`discord_enabled=false`).
+Discord kullanıcı adı başvuru formunun **zorunlu** alanıdır. Kullanıcı adını kendisi yazar; 3–32 karakter olmalı ve yalnızca harf, rakam, `.` ve `_` içermelidir. Değer hem istemcide hem Edge Function'da ve veritabanı kısıtında doğrulanır. Discord hesap bağlama, OAuth, bot, DM bildirimi veya buna ait bir ayar kullanılmaz; bu alan için ayrı bir kurulum gerekmez.
 
 ## 8. Yerelde çalıştır
 
@@ -194,17 +190,17 @@ npm run build      # tsc -b && vite build → dist/
 
 ## 9. Doğrulama kontrol listesi
 
-- [ ] SQL Editor'da sekiz göç dosyası hatasız uygulandı; `positions=2`, `questions=13`, ölçüt ağırlık toplamı `100`, yaş sorusu `16–99`.
-- [ ] `create_first_admin`, `apply_application_decision`, `submit_application_atomic`, `increment_rate_limit`, `claim_pending_notification`, `claim_failed_notification` RPC'leri `service_role` için çalıştırılabiliyor.
+- [ ] SQL Editor'da dokuz göç dosyası hatasız uygulandı (`0006` yer tutucudur, `0009` eski Discord/DM nesnelerini kaldırdı); `positions=2`, `questions=13`, ölçüt ağırlık toplamı `100`, yaş sorusu `16–99`.
+- [ ] `create_first_admin`, `apply_application_decision`, `submit_application_atomic`, `increment_rate_limit` RPC'leri `service_role` için çalıştırılabiliyor.
 - [ ] `.env` gerçek proje URL/anon anahtarını içeriyor, `service_role` içermiyor.
 - [ ] `node scripts/create-first-admin.mjs` başarılı; `admins` tablosunda 1 kayıt var.
 - [ ] `supabase secrets list` gerekli anahtar adlarını gösteriyor.
-- [ ] 10 uç `--no-verify-jwt` ile dağıtıldı; Dashboard → Edge Functions → Logs'ta hata yok.
+- [ ] 8 uç `--no-verify-jwt` ile dağıtıldı; Dashboard → Edge Functions → Logs'ta hata yok.
 - [ ] `/apply/rehber` sayfası veritabanından gelen soruları gösteriyor.
+- [ ] Başvuru formundaki Discord kullanıcı adı zorunlu; 3–32 karakter ve harf/rakam/`.`/`_` dışındaki karakterler reddediliyor.
 - [ ] Form gönderildiğinde `tracking_no` ve `query_token` dönyor; `/status` ile durum sorgulanabiliyor.
 - [ ] `/admin` adresinde CLI'da belirlediğiniz kullanıcı adı/parola ile giriş yapılabiliyor.
 - [ ] Yönetim panelinden bir soru/ayar değiştirilip kaydedildiğinde değişiklik geri okunuyor.
-- [ ] Discord etkinse: bağlama akışı tamamlanıyor, karar sonrası DM gidiyor; DM kapalıysa `failed` görülüp panelden yeniden denenebiliyor.
 - [ ] `npm test` yeşil.
 
 ## Sorun giderme
@@ -216,9 +212,8 @@ npm run build      # tsc -b && vite build → dist/
 | Girişte `Oturum sistemi yapılandırılmamış` | `SESSION_SECRET` yok | Edge secret olarak ekleyin; oturum çerezi eskisi geçersiz olur, tekrar giriş yapın. |
 | Başvuru `429 too_fast` | Form 3 saniyeden kısa sürede gönderildi | Formu dikkatlice doldurup tekrar deneyin; bu bir hata değil, bot önlemidir. |
 | Başvuru `429 rate_limit` | IP başına saatlik sınır (varsayılan 5) doldu | Bir saat bekleyin veya `app_settings.rate_limit_per_ip_per_hour` değerini yönetim panelinden güncelleyin. |
+| Discord kullanıcı adı reddedildi | 3–32 karakter kuralı veya izin verilmeyen karakter | Yalnızca harf, rakam, `.` ve `_` kullanın. |
 | CORS hatası (tarayıcı konsolunda) | `ALLOWED_ORIGINS` üretim adresini içermiyor | Origin'i virgülle ayrılmış listeye ekleyip uçları yeniden dağıtın; joker `*` kullanmayın. |
 | `İlk yönetici zaten oluşturulmuş` | `admins` tablosu dolu | Mevcut hesapla giriş yapın; değiştirme gerekiyorsa CLI'daki onay ifadesiyle `ALLOW_REPLACE_ADMIN=1` kullanın. |
-| `42703 / PGRST204` kolom hatası | Göç sırası atlandı veya şema sürümü eski | 0001→0008 sırasıyla yeniden uygulayın; uçlar bazı kolom varyantlarını tolere etse de şema tam olmalıdır. |
-| Discord callback `invalid_state` | `DISCORD_REDIRECT_URI` farklı, cookie veya state süresi (10 dk) doldu | Yönlendirme URL'sini birebir eşitleyip akışı baştan başlatın. |
-| DM `failed` | Kullanıcı DM'leri kapalı veya bot token yok | Kullanıcı ayarını açın, `DISCORD_BOT_TOKEN` secret'ını kontrol edin, panelden **Yeniden Dene** yapın. |
+| `42703 / PGRST204` kolom hatası | Göç sırası atlandı veya şema sürümü eski | 0001→0009 sırasıyla yeniden uygulayın; mevcut veritabanında `0009` tek başına da uzlaştırma yapar. |
 | GitHub Pages 404 / boş sayfa | `VITE_BASE_PATH` yanlış veya Pages kaynağı yanlış | [github-pages.md](github-pages.md) belgesindeki dağıtım kontrol listesini izleyin. |

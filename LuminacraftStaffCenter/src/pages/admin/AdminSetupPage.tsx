@@ -168,7 +168,7 @@ export default function AdminSetupPage() {
                   <LockKeyhole size={16} className="text-cyan-300" /> Sırlar tarayıcıda yok
                 </p>
                 <p className="mt-2 leading-relaxed">
-                  Service role anahtarı, Discord bot belirteci ve oturum sırrı yalnızca Edge Function
+                  Service role anahtarı ve oturum sırrı yalnızca Edge Function
                   ortamında tanımlanır. Bu panelde görüntülenmez veya düzenlenmez.
                 </p>
               </div>

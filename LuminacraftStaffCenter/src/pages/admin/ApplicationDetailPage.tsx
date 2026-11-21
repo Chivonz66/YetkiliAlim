@@ -2,14 +2,12 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
   ArrowLeft,
-  BellRing,
   CalendarDays,
   CheckCircle2,
   ClipboardList,
   Hash,
   MessageCircle,
   MapPin,
-  RotateCcw,
   UserRound,
 } from 'lucide-react'
 import { Badge } from '../../components/ui/Badge'
@@ -23,10 +21,7 @@ import ScorePanel from '../../components/admin/ScorePanel'
 import { useAdminToast } from '../../components/admin/AdminLayout'
 import {
   getApplication,
-  listNotifications,
   listQuestions,
-  retryNotification,
-  sendNotification,
   updateApplicationStatus,
 } from '../../lib/api-admin'
 import { APPLICATION_STATUSES, POSITIONS, QUESTION_CATEGORIES } from '../../lib/constants'
@@ -39,7 +34,6 @@ import type {
   ApplicationNote,
   ApplicationScore,
   ApplicationStatus,
-  DiscordNotification,
   Question,
 } from '../../types'
 
@@ -65,24 +59,15 @@ function answerText(answer: ApplicationAnswer): string {
   return formatAnswerValue(answer.value)
 }
 
-function notificationLabel(status: string | null | undefined): string {
-  if (status === 'sent') return 'Gönderildi'
-  if (status === 'failed') return 'Başarısız'
-  if (status === 'pending') return 'Gönderim sırada'
-  return 'Bildirim yok'
-}
-
 export default function ApplicationDetailPage() {
   const { id = '' } = useParams()
   const [detail, setDetail] = useState<DetailState | null>(null)
   const [questions, setQuestions] = useState<Question[]>([])
-  const [notifications, setNotifications] = useState<DiscordNotification[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [pendingStatus, setPendingStatus] = useState<ApplicationStatus | null>(null)
   const [decisionNote, setDecisionNote] = useState('')
   const [savingDecision, setSavingDecision] = useState(false)
-  const [sendingNotification, setSendingNotification] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
   const notify = useAdminToast()
 
@@ -92,13 +77,11 @@ export default function ApplicationDetailPage() {
     Promise.all([
       getApplication(id),
       listQuestions().catch(() => [] as Question[]),
-      listNotifications(id).catch(() => [] as DiscordNotification[]),
     ])
-      .then(([applicationDetail, questionList, notificationList]) => {
+      .then(([applicationDetail, questionList]) => {
         if (!active) return
         setDetail(applicationDetail)
         setQuestions(questionList)
-        setNotifications(notificationList)
         setError('')
       })
       .catch((caught) => {
@@ -139,31 +122,6 @@ export default function ApplicationDetailPage() {
     }
   }
 
-  const handleNotification = async () => {
-    if (!detail) return
-    // Yalnızca gerçekten başarısız bildirimler yeniden gönderilebilir; bekleyen/gönderilen
-    // bir kaydı retry etmek Edge Function tarafından invalid_state ile reddedilir.
-    const failedNotifications = notifications.filter((item) => item.status === 'failed')
-    const lastFailed = failedNotifications[0]
-    const isRetry = Boolean(lastFailed)
-    setSendingNotification(true)
-    try {
-      const result = lastFailed
-        ? await retryNotification(lastFailed.id)
-        : await sendNotification(detail.application.id)
-      if (result.notification_status === 'failed' && result.error) {
-        notify(result.error, 'error')
-      } else {
-        notify(isRetry ? 'Bildirim yeniden gönderildi.' : 'Bildirim gönderildi.', 'success')
-      }
-      reload()
-    } catch (caught) {
-      notify(caught instanceof Error ? caught.message : 'Bildirim gönderilemedi.', 'error')
-    } finally {
-      setSendingNotification(false)
-    }
-  }
-
   if (loading) {
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center gap-3" role="status">
@@ -185,9 +143,6 @@ export default function ApplicationDetailPage() {
   }
 
   const { application, answers, scores, notes, history } = detail
-  const notificationStatus = application.notification_status
-  const hasDiscord = Boolean(application.discord_user_id || application.applicant_discord_username)
-  const decided = application.status === 'accepted' || application.status === 'rejected'
 
   return (
     <div className="space-y-6">
@@ -217,7 +172,7 @@ export default function ApplicationDetailPage() {
       </header>
 
       <section className="grid gap-5 lg:grid-cols-3">
-        <Card title="Başvuran" description="Kişisel ve Discord bilgileri">
+        <Card title="Başvuran" description="Kişisel ve iletişim bilgileri">
           <dl className="space-y-3 text-sm">
             <div className="flex items-start gap-3">
               <UserRound size={16} className="mt-0.5 shrink-0 text-cyan-300" />
@@ -226,17 +181,9 @@ export default function ApplicationDetailPage() {
             <div className="flex items-start gap-3">
               <MessageCircle size={16} className="mt-0.5 shrink-0 text-cyan-300" />
               <div>
-                <dt className="text-xs text-slate-500">Discord bağlantısı</dt>
-                <dd className="text-slate-100">
-                  {application.applicant_discord_username || 'Belirtilmedi'}
-                  {application.discord_connected ? ' · bağlı' : ''}
-                </dd>
+                <dt className="text-xs text-slate-500">Discord kullanıcı adı</dt>
+                <dd className="font-semibold text-slate-100">{application.applicant_discord_username}</dd>
               </div>
-            </div>
-            <div className="pt-1">
-              <Badge variant={hasDiscord ? 'success' : 'warning'}>
-                {hasDiscord ? 'Discord hesabı bağlı' : 'Discord hesabı bulunamadı'}
-              </Badge>
             </div>
           </dl>
         </Card>
@@ -269,7 +216,7 @@ export default function ApplicationDetailPage() {
           </dl>
         </Card>
 
-        <Card title="Karar ve bildirim" description="Durumu değiştirin, Discord sonucunu izleyin">
+        <Card title="Karar" description="Başvuru durumunu değiştirin">
           <div className="flex flex-wrap gap-2">
             {APPLICATION_STATUSES.map((option) => (
               <button
@@ -291,42 +238,6 @@ export default function ApplicationDetailPage() {
                 {option.label}
               </button>
             ))}
-          </div>
-
-          <div className="mt-5 rounded-lg border border-white/5 bg-black/20 p-3">
-            <p className="flex items-center gap-2 text-xs uppercase tracking-wider text-slate-500">
-              <BellRing size={14} /> Discord bildirimi
-            </p>
-            <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-              <Badge
-                variant={
-                  notificationStatus === 'sent'
-                    ? 'success'
-                    : notificationStatus === 'failed'
-                      ? 'danger'
-                      : notificationStatus === 'pending'
-                        ? 'pending'
-                        : 'default'
-                }
-              >
-                {notificationLabel(notificationStatus)}
-              </Badge>
-              {decided && notificationStatus !== 'sent' && (
-                <Button
-                  variant="secondary"
-                  icon={<RotateCcw size={14} />}
-                  loading={sendingNotification}
-                  onClick={handleNotification}
-                >
-                  Yeniden gönder
-                </Button>
-              )}
-            </div>
-            {notifications.find((item) => item.last_error)?.last_error && (
-              <p className="mt-2 text-xs text-red-300">
-                {notifications.find((item) => item.last_error)?.last_error}
-              </p>
-            )}
           </div>
         </Card>
       </section>
@@ -395,19 +306,14 @@ export default function ApplicationDetailPage() {
           </>
         }
       >
-        <p className="text-sm text-slate-300">
-          Bu işlem denetim kaydına yazılır.
-          {pendingStatus === 'accepted' || pendingStatus === 'rejected'
-            ? ' Karar sonrası Discord bildirimi otomatik olarak kuyruğa alınır.'
-            : ''}
-        </p>
+        <p className="text-sm text-slate-300">Bu işlem denetim kaydına yazılır.</p>
         <div className="mt-4">
           <Textarea
             label="Karar notu (isteğe bağlı)"
             rows={3}
             maxLength={1000}
             value={decisionNote}
-            placeholder="Karar gerekçenizi yazın; ekip kayıtlarına iç not olarak işlenir. Discord açıksa başvurana geri bildirim olarak iletilir."
+            placeholder="Karar gerekçenizi yazın; ekip kayıtlarına iç not olarak işlenir."
             onChange={(event) => setDecisionNote(event.target.value)}
           />
         </div>

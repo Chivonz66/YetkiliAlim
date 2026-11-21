@@ -1,4 +1,4 @@
-// Uygulama ayarları: başvuru açıklığı, kapalı mesajı, Discord ve oran sınırı.
+// Uygulama ayarları: başvuru açıklığı, kapalı mesajı, site başlığı ve oran sınırı.
 import { requireAdmin } from '../_shared/auth.ts'
 import { preflight, withCors } from '../_shared/cors.ts'
 import { getAdminClient, writeAudit } from '../_shared/db.ts'

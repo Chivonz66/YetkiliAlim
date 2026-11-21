@@ -51,8 +51,6 @@ const TABLOLAR = [
   'admin_sessions',
   'app_settings',
   'rate_limits',
-  'discord_links',
-  'notification_queue',
   'audit_logs',
 ] as const
 
@@ -104,7 +102,17 @@ function yorumlariKaldir(kod: string): string {
 
 describe('göç dosyaları', () => {
   it('göç dosyaları mevcut ve boş değil', () => {
-    expect(GOC_DOSYALARI.length).toBeGreaterThanOrEqual(4)
+    expect(GOC_DOSYALARI).toEqual([
+      '0001_initial_schema.sql',
+      '0002_rls_policies.sql',
+      '0003_functions_triggers.sql',
+      '0004_seed_data.sql',
+      '0005_submit_atomic.sql',
+      '0006_decision_notify.sql',
+      '0007_live_reconciliation.sql',
+      '0008_public_position_settings.sql',
+      '0009_remove_discord_integrations.sql',
+    ])
     for (const dosya of GOC_DOSYALARI) {
       const tamYol = join(kok, 'supabase/migrations', dosya)
       expect(existsSync(tamYol), dosya).toBe(true)
@@ -116,20 +124,15 @@ describe('göç dosyaları', () => {
     expect(TUM_SQL).toContain('CREATE EXTENSION IF NOT EXISTS pgcrypto')
   })
 
-  it('on yedi tablonun tamamı uuid birincil anahtarla tanımlı', () => {
-    expect(TABLOLAR).toHaveLength(17)
+  it('on beş tablonun tamamı uuid birincil anahtarla tanımlı', () => {
+    expect(TABLOLAR).toHaveLength(15)
     for (const tablo of TABLOLAR) {
       expect(TUM_SQL, tablo).toMatch(
         new RegExp(`CREATE TABLE(?: IF NOT EXISTS)? public\\.${tablo}\\s*\\(`),
       )
     }
-    // Dört tablonun doğal anahtarı vardır: oturum, ayar, hız sınırı ve Discord bağlantısı.
-    const dogalAnahtarli = [
-      'admin_sessions',
-      'app_settings',
-      'rate_limits',
-      'discord_links',
-    ] as const
+    // Üç tablonun doğal anahtarı vardır: oturum, ayar ve hız sınırı.
+    const dogalAnahtarli = ['admin_sessions', 'app_settings', 'rate_limits'] as const
     expect((TUM_SQL.match(/gen_random_uuid\(\)/g) ?? []).length).toBeGreaterThanOrEqual(
       TABLOLAR.length - dogalAnahtarli.length,
     )
@@ -138,6 +141,29 @@ describe('göç dosyaları', () => {
   it('zaman damgaları timestamptz ve varsayılan now() kullanır', () => {
     expect(TUM_SQL).toContain('created_at timestamptz NOT NULL DEFAULT now()')
     expect(TUM_SQL).toContain('updated_at timestamptz NOT NULL DEFAULT now()')
+  })
+
+  it('0009 eski Discord/DM nesnelerini kaldırırken zorunlu kullanıcı adını korur', () => {
+    const goc9 = oku('supabase/migrations/0009_remove_discord_integrations.sql')
+    expect(goc9).toContain('DROP TABLE IF EXISTS public.discord_links')
+    expect(goc9).toContain('DROP TABLE IF EXISTS public.notification_queue')
+    expect(goc9).toContain('DROP COLUMN IF EXISTS discord_user_id')
+    expect(goc9).toContain('DROP COLUMN IF EXISTS discord_connected')
+    expect(goc9).toContain('DROP COLUMN IF EXISTS notification_status')
+    expect(goc9).toContain("DELETE FROM public.app_settings WHERE key = 'discord_enabled'")
+    expect(goc9).toContain("CHECK (applicant_discord_username ~ '^[A-Za-z0-9_.]{3,32}$')")
+    expect(goc9).not.toMatch(/INSERT INTO public\.(discord_links|notification_queue)/)
+  })
+
+  it('0006 yer tutucu, 0005 iki bağımsız değişkenli atomik RPC tanımlar', () => {
+    const goc6 = oku('supabase/migrations/0006_decision_notify.sql')
+    const goc5 = oku('supabase/migrations/0005_submit_atomic.sql')
+    expect(goc6).toContain('yer tutucu')
+    expect(goc6).not.toMatch(/^\s*(ALTER TABLE|CREATE OR REPLACE|INSERT INTO)/m)
+    expect(goc5).toContain('CREATE OR REPLACE FUNCTION public.submit_application_atomic(')
+    expect(goc5).toContain('p_application jsonb,')
+    expect(goc5).toContain('p_answers jsonb')
+    expect(goc5).not.toContain('p_discord_user_id')
   })
 })
 
@@ -153,9 +179,11 @@ describe('soru ve başvuru kısıtları', () => {
     expect(tipler).toEqual([...SORU_TIPLERI])
   })
 
-  it('başvuru durumu ve bildirim durumu CHECK ile sınırlı', () => {
+  it('başvuru durumu CHECK ile sınırlı; bildirim kuyruğu yok', () => {
     expect(SEMA).toMatch(/status IN \('pending','reviewing','accepted','rejected'\)/)
-    expect(SEMA).toMatch(/status IN \('pending','sent','failed'\)/)
+    expect(TUM_SQL).not.toMatch(/status IN \('pending','sent','failed'\)/)
+    expect(TUM_SQL).not.toContain('CREATE TABLE IF NOT EXISTS public.notification_queue')
+    expect(TUM_SQL).not.toContain('CREATE TABLE IF NOT EXISTS public.discord_links')
   })
 
   it('başvuru yaş, saat ve kullanıcı adı açısından güvenli', () => {
@@ -210,7 +238,7 @@ describe('satır düzeyi güvenlik', () => {
 
   it('yönetim tabloları için açık reddetme ilkeleri var', () => {
     const reddetmeSayisi = (RLS.match(/USING \(false\) WITH CHECK \(false\)/g) ?? []).length
-    expect(reddetmeSayisi).toBeGreaterThanOrEqual(12)
+    expect(reddetmeSayisi).toBeGreaterThanOrEqual(10)
     expect(RLS).not.toMatch(/GRANT (ALL|INSERT|UPDATE|DELETE) ON public\.\w+ TO anon/i)
     expect(RLS).toContain('GRANT SELECT ON public.positions')
   })
@@ -226,11 +254,11 @@ describe('satır düzeyi güvenlik', () => {
       'status',
       'submitted_at',
       'decided_at',
-      'notification_status',
       'status_history',
     ]) {
       expect(RLS, alan).toContain(`${alan} `)
     }
+    expect(RLS).not.toContain('notification_status')
   })
 
   it('herkese açık soru işlevi mevcut ve anonime açık', () => {
@@ -339,15 +367,14 @@ describe('tohum verisi', () => {
       'site_title',
       'applications_open',
       'closed_message',
-      'discord_enabled',
       'min_minecraft_age_months',
       'rate_limit_per_ip_per_hour',
     ]) {
       expect(TOHUM, anahtar).toContain(`('${anahtar}'`)
     }
     expect(TOHUM).toContain("('applications_open', 'true'::jsonb)")
-    expect(TOHUM).toContain("('discord_enabled', 'false'::jsonb)")
     expect(TOHUM).toContain("('rate_limit_per_ip_per_hour', '5'::jsonb)")
+    expect(TOHUM).not.toContain('discord_enabled')
   })
 
   it('pozisyon açıklık ayarları herkese açık okuma kapsamında', () => {

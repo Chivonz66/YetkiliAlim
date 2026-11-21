@@ -32,7 +32,6 @@ export {
 
 export const SESSION_COOKIE = 'lsc_admin_session'
 export const CSRF_COOKIE = 'lsc_csrf'
-export const OAUTH_STATE_COOKIE = 'lsc_oauth_state'
 export const SESSION_MAX_AGE = 28800
 
 function randomBytes(length: number): Uint8Array {

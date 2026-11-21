@@ -8,7 +8,6 @@ import {
   buildApplicationPayload,
   computeElapsedMs,
   getClosedMessage,
-  getDiscordOAuthUrl,
   getQuestionOptions,
   getSettingFlag,
   groupQuestions,
@@ -273,22 +272,18 @@ describe('başvuru gönderimi güvenliği', () => {
     expect(answers).toEqual([{ question_id: 'q-9', value: true }])
   })
 
-  it('imzalı Discord bağlantı belirteci gövde ve OAuth başlangıç URL sinde taşınır', () => {
+  it('Discord kullanıcı adı düz metin olarak taşınır; bağlantı belirteci yoktur', () => {
     const payload = buildApplicationPayload({
       position_slug: 'rehber',
-      applicant: { minecraft_username: 'Lumina' },
+      applicant: { minecraft_username: 'Lumina', discord_username: 'lumina.player' },
       answers: {},
       website: '',
       elapsed_ms: 0,
-      discord_link_token: 'imzali-belirtek',
     })
-    expect(payload.discord_link_token).toBe('imzali-belirtek')
-
-    const url = getDiscordOAuthUrl('/apply/rehber', 'imzali-belirtek')
-    expect(url).toContain('action=start')
-    expect(url).toContain('return_to=')
-    expect(url).toContain('discord_link_token=imzali-belirtek')
-    expect(getDiscordOAuthUrl('/apply/rehber', '')).not.toContain('discord_link_token')
+    expect(payload.applicant.discord_username).toBe('lumina.player')
+    expect(JSON.stringify(payload)).not.toMatch(
+      /discord_link_token|discord_notification|discord_notified|notification_status/i,
+    )
   })
 })
 

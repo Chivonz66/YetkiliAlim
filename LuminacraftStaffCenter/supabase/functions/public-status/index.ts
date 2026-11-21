@@ -14,7 +14,6 @@ const SAFE_FIELDS = [
   'status',
   'submitted_at',
   'decided_at',
-  'notification_status',
   'status_history',
 ] as const
 

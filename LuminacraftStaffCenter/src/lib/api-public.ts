@@ -139,8 +139,6 @@ export interface SubmitApplicationPayload {
   answers: Record<string, unknown> | AnswerEntry[]
   website?: string
   elapsed_ms?: number
-  /** Discord OAuth geri dönüşünde imzalanan geçici bağlantı belirteci. */
-  discord_link_token?: string
 }
 
 export interface ApplicationPayloadWire {
@@ -149,7 +147,6 @@ export interface ApplicationPayloadWire {
   answers: AnswerEntry[]
   website: string
   elapsed_ms: number
-  discord_link_token?: string
 }
 
 function isEmptyAnswer(value: unknown): boolean {
@@ -188,7 +185,6 @@ export function normalizeAnswers(
 export function buildApplicationPayload(
   payload: SubmitApplicationPayload,
 ): ApplicationPayloadWire {
-  const discordLinkToken = String(payload.discord_link_token ?? '')
   return {
     position_slug: String(payload.position_slug ?? '').trim(),
     applicant: payload.applicant ?? {},
@@ -198,7 +194,6 @@ export function buildApplicationPayload(
     elapsed_ms: payload.elapsed_ms === undefined
       ? 0
       : Math.max(0, Math.min(Math.round(payload.elapsed_ms), 3_600_000)),
-    ...(discordLinkToken ? { discord_link_token: discordLinkToken } : {}),
   }
 }
 
@@ -504,9 +499,6 @@ export interface StatusLookupResponse {
   submitted_at?: string | null
   reviewed_at?: string | null
   decision_date?: string | null
-  discord_notification?: { status?: string } | string | null
-  discord_notified?: boolean
-  discord_username?: string | null
 }
 
 export async function lookupStatus(trackingNo: string, queryToken: string): Promise<StatusLookupResponse> {
@@ -520,28 +512,4 @@ export async function lookupStatus(trackingNo: string, queryToken: string): Prom
     { tracking_no, query_token },
     'Başvuru sorgulanamadı.',
   )
-}
-
-/**
- * Sunucu tarafında SESSION_SECRET ile imzalanan tek kullanımlık bağlantı belirtecini alır.
- * İstemci sırrı asla görmez; yalnızca imzalı belirteci taşır.
- */
-export async function requestDiscordLinkToken(): Promise<string> {
-  const result = await postJson<{ ok?: boolean; discord_link_token?: string }>(
-    '/discord-oauth',
-    { action: 'link-token' },
-    'Discord bağlantı belirteci alınamadı.',
-  )
-  if (!result?.discord_link_token) {
-    throw new PublicApiError('Discord bağlantı belirteci alınamadı.', 'BAD_RESPONSE')
-  }
-  return String(result.discord_link_token)
-}
-
-/** Discord OAuth akışı isteğe bağlıdır; imzalı bağlantı belirteci start URL'sine eklenir. */
-export function getDiscordOAuthUrl(returnTo: string, discordLinkToken: string): string {
-  const base = String(import.meta.env.VITE_SUPABASE_URL ?? '').replace(/\/+$/, '')
-  const params = new URLSearchParams({ action: 'start', return_to: returnTo })
-  if (discordLinkToken) params.set('discord_link_token', discordLinkToken)
-  return `${base}${FUNCTIONS_PATH}/discord-oauth?${params.toString()}`
 }

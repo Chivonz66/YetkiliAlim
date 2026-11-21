@@ -1,10 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import {
-  signSessionToken,
-  verifySessionToken,
-} from '../supabase/functions/_shared/pure.ts'
 
 /**
  * Görev C sözleşmesi: kaynak metin + saf imza yardımcılarıyla, canlı Supabase
@@ -28,13 +24,11 @@ const kod = (goreliYol: string): string =>
 
 const EDGE = 'supabase/functions'
 const ADMIN_POSITIONS = `${EDGE}/admin-positions/index.ts`
-const DISCORD_OAUTH = `${EDGE}/discord-oauth/index.ts`
 const SUBMIT = `${EDGE}/submit-application/index.ts`
 const APPLY_PAGE = 'src/pages/ApplyPage.tsx'
 const PUBLIC_API = 'src/lib/api-public.ts'
 const MIGRATION = 'supabase/migrations/0005_submit_atomic.sql'
-
-const SECRET = 'task-c-test-secret'
+const REMOVAL_MIGRATION = 'supabase/migrations/0009_remove_discord_integrations.sql'
 
 describe('YA-04 — pozisyon açıklığı tek kaynaktan okunur', () => {
   it('yönetici is_open değerini app_settings anahtarına yazar ve geri yansıtır', () => {
@@ -58,75 +52,57 @@ describe('YA-04 — pozisyon açıklığı tek kaynaktan okunur', () => {
   })
 })
 
-describe('YA-05 — Discord bağlantısı başvuruya bağlanır', () => {
-  it('imzalı belirteç pending ve bound aşamalarında doğrulanabilir', () => {
-    const now = Math.floor(Date.now() / 1000)
-    const pending = signSessionToken(
-      { sub: 'client-nonce', exp: now + 600, nonce: 'discord-link:pending:abc' },
-      SECRET,
-    )
-    const bound = signSessionToken(
-      { sub: '123456789012345678', exp: now + 3600, nonce: 'discord-link:bound:def' },
-      SECRET,
-    )
-
-    expect(verifySessionToken(pending, SECRET)?.nonce).toContain('discord-link:pending:')
-    expect(verifySessionToken(bound, SECRET)?.sub).toBe('123456789012345678')
-    expect(verifySessionToken(bound, SECRET, now + 4000)).toBeNull()
-    expect(verifySessionToken(pending, 'baska-sır')).toBeNull()
-  })
-
-  it('OAuth başlangıcı yalnızca imzalı belirteci kabul eder, application_id almaz', () => {
-    const oauth = kod(DISCORD_OAUTH)
-    expect(oauth).toContain('signSessionToken')
-    expect(oauth).toContain('verifySessionToken')
-    expect(oauth).toContain("verifyLinkToken(url.searchParams.get('discord_link_token'), 'pending', secret)")
-    expect(oauth).toContain("requireAdmin(req, { csrf: false })")
-    expect(oauth).not.toContain("url.searchParams.get('application_id')")
-    expect(oauth).not.toContain('const applicationId = applicationIdFrom(')
-  })
-
-  it('callback Discord kimliğini yeni belirtece bağlayıp geri döndürür', () => {
-    const oauth = kod(DISCORD_OAUTH)
-    expect(oauth).toContain('createLinkToken(discordUserId, \'bound\', secret)')
-    expect(oauth).toContain("destination.searchParams.set('discord_link_token', boundToken)")
-    expect(oauth).toContain('DISCORD_ID_PATTERN.test(String(user.id))')
-    expect(oauth).toContain('clearedLinkCookie()')
-  })
-
-  it('başvuru formu belirteci OAuth URL ve gönderim gövdesine taşır', () => {
+describe('YA-05 — Discord kullanıcı adı zorunlu, hesap bağlama yok', () => {
+  it('başvuru formu Discord kullanıcı adını zorunlu ve biçimli ister', () => {
     const page = kod(APPLY_PAGE)
-    expect(page).toContain('requestDiscordLinkToken')
-    expect(page).toContain('getDiscordOAuthUrl(withBasePath(location.pathname), token)')
-    expect(page).toContain("params.get('discord_link_token')")
-    expect(page).toContain('discord_link_token: discordLinkToken')
-
-    const api = kod(PUBLIC_API)
-    expect(api).toContain('export async function requestDiscordLinkToken()')
-    expect(api).toContain("params.set('discord_link_token', discordLinkToken)")
+    expect(page).toContain('Discord kullanıcı adı zorunludur;')
+    expect(page).toContain('/^[A-Za-z0-9_.]{3,32}$/.test(discord)')
+    expect(page).not.toMatch(
+      /discord_link_token|requestDiscordLinkToken|getDiscordOAuthUrl|discordLinked|oauthHref|discord_linked/i,
+    )
   })
 
-  it('gönderim belirteci doğrular ve Discord alanlarını atomik RPC ile yazar', () => {
+  it('ortak API bağlantı belirteci veya bildirim durumu taşımaz', () => {
+    const api = kod(PUBLIC_API)
+    expect(api).not.toMatch(/discord_link_token|requestDiscordLinkToken|getDiscordOAuthUrl/i)
+    expect(api).not.toMatch(/discord_notification|discord_notified|notification_status/)
+  })
+
+  it('sunucu Discord kullanıcı adını doğrular ve bağlantı belirteci kabul etmez', () => {
     const submit = kod(SUBMIT)
-    expect(submit).toContain('verifySessionToken(token, secret)')
-    expect(submit).toContain("payload.nonce.startsWith('discord-link:bound:')")
-    expect(submit).toContain('/^\\d{5,25}$/.test(payload.sub)')
-    expect(submit).toContain('p_discord_user_id: discordLink?.userId ?? null')
-    expect(submit).toContain('p_discord_username: discordLink?.username ?? null')
-    expect(submit).not.toMatch(/discord_connected:\s*true/)
+    const validation = kod('supabase/functions/_shared/validation.ts')
+    expect(validation).toContain('Discord kullanıcı adı zorunludur.')
+    expect(validation).toContain('/^[A-Za-z0-9_.]{3,32}$/')
+    expect(submit).toContain('applicant_discord_username: discord')
+    expect(submit).toContain("rpc('submit_application_atomic'")
+    expect(submit).not.toMatch(/verifySessionToken|discord_link_token|discordLink|discord-link:/i)
+    expect(submit).not.toContain('p_discord_user_id')
   })
 })
 
-describe('YA-10 / YA-11 — atomik yazım ve sayıç', () => {
-  it('göç başvuru, cevap ve Discord bağlantısını tek fonksiyonda yazar', () => {
+describe('YA-10 / YA-11 — atomik yazım ve sayaç', () => {
+  it('göç başvuru ve cevapları tek fonksiyonda yazar', () => {
     const sql = kaynak(MIGRATION)
     expect(sql).toContain('CREATE OR REPLACE FUNCTION public.submit_application_atomic(')
+    expect(sql).toContain('p_application jsonb,')
+    expect(sql).toContain('p_answers jsonb')
     expect(sql).toContain('INSERT INTO public.applications (')
     expect(sql).toContain('INSERT INTO public.application_answers (')
-    expect(sql).toContain('INSERT INTO public.discord_links (')
-    expect(sql).toContain('application_id = EXCLUDED.application_id')
+    expect(sql).toContain('applicant_discord_username,')
     expect(sql).toContain('SECURITY DEFINER')
     expect(sql).toMatch(/REVOKE ALL ON FUNCTION public\.submit_application_atomic/)
+    expect(sql).not.toContain('discord_links')
+    expect(sql).not.toContain('notification_queue')
+  })
+
+  it('0009 eski Discord/DM veritabanı nesnelerini kaldırır ve RPC’yi sadeleştirir', () => {
+    const sql = kaynak(REMOVAL_MIGRATION)
+    expect(sql).toContain('DROP TABLE IF EXISTS public.discord_links')
+    expect(sql).toContain('DROP TABLE IF EXISTS public.notification_queue')
+    expect(sql).toContain('DROP COLUMN IF EXISTS notification_status')
+    expect(sql).toContain('submit_application_atomic(jsonb, jsonb, text, text, text)')
+    expect(sql).toContain('CREATE OR REPLACE FUNCTION public.submit_application_atomic(')
+    expect(sql).not.toMatch(/INSERT INTO public\.(discord_links|notification_queue)/)
   })
 
   it('hız sınırı UPSERT ... RETURNING ile atomik artırılır', () => {

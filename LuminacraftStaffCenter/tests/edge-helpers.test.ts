@@ -4,7 +4,6 @@ import {
   SCORE_CRITERIA,
   base64urlDecode,
   buildAuditRow,
-  canRetryNotification,
   createTrackingNo,
   dailyActivityToHours,
   decodeSessionPayload,
@@ -184,6 +183,7 @@ describe('başvuru alan doğrulama', () => {
     expect(isValidMinecraftUsername('ab')).toBe(false)
     expect(isValidMinecraftUsername('steve.exe')).toBe(false)
     expect(isValidDiscordUsername('player.name_2')).toBe(true)
+    expect(isValidDiscordUsername('ab')).toBe(false)
     expect(isValidDiscordUsername('a')).toBe(false)
   })
 
@@ -219,13 +219,6 @@ describe('şema sözleşmesi yardımcıları', () => {
     expect(row.actor_id).toBeNull()
     expect(row.target_id).toBeNull()
     expect(row.details).toEqual({})
-  })
-
-  it('yalnızca başarısız bildirimlerin yeniden gönderilmesine izin verir', () => {
-    expect(canRetryNotification('failed')).toBe(true)
-    expect(canRetryNotification('pending')).toBe(false)
-    expect(canRetryNotification('sent')).toBe(false)
-    expect(canRetryNotification(null)).toBe(false)
   })
 
   it('günlük aktivite değerlerini daily_hours aralığına eşler', () => {

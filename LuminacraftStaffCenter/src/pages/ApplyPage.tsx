@@ -1,18 +1,15 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
-import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import {
   AlertTriangle,
   ArrowLeft,
   ArrowRight,
-  BadgeCheck,
   CheckCircle2,
   Clipboard,
   ClipboardCheck,
   Clock3,
   Copy,
   Gamepad2,
-  Gift,
-  Link2,
   LockKeyhole,
   MessageCircle,
   Send,
@@ -32,19 +29,17 @@ import {
   areApplicationsOpen,
   computeElapsedMs,
   getClosedMessage,
-  getDiscordOAuthUrl,
   getQuestionOptions,
   getQuestions,
   getSettings,
   groupQuestions,
   isHoneypotFilled,
-  requestDiscordLinkToken,
   submitApplication,
   type PublicApiErrorLike,
   type PublicQuestion,
   type SettingsMap,
 } from '../lib/api-public'
-import { POSITIONS, withBasePath } from '../lib/constants'
+import { POSITIONS } from '../lib/constants'
 import { isAnswerValid } from '../lib/utils'
 
 interface ApplicantState {
@@ -95,8 +90,12 @@ function generalErrors(applicant: ApplicantState): Errors {
   }
 
   const discord = applicant.discord_username.trim()
-  if (discord && !isAnswerValid('short_text', discord, { maxLength: 32 })) {
-    errors.discord_username = 'Discord kullanıcı adı en fazla 32 karakter olabilir.'
+  if (
+    !isAnswerValid('short_text', discord, { required: true, minLength: 3, maxLength: 32 }) ||
+    !/^[A-Za-z0-9_.]{3,32}$/.test(discord)
+  ) {
+    errors.discord_username =
+      'Discord kullanıcı adı zorunludur; 3–32 karakter olmalı ve yalnızca harf, sayı, nokta veya alt çizgi içermelidir.'
   }
 
   const age = applicant.age === '' ? '' : Number(applicant.age)
@@ -195,8 +194,6 @@ function Field({
 
 export function ApplyPage() {
   const { position: positionParam } = useParams()
-  const location = useLocation()
-  const navigate = useNavigate()
   const position = POSITIONS.find((item) => item.slug === positionParam)
   const mountedAt = useRef(Date.now())
   const formRef = useRef<HTMLFormElement>(null)
@@ -215,43 +212,7 @@ export function ApplyPage() {
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
   const [submission, setSubmission] = useState<{ tracking_no: string; query_token: string } | null>(null)
-  const [discordLinked, setDiscordLinked] = useState(false)
-  const [discordLinkToken, setDiscordLinkToken] = useState('')
-  const [oauthHref, setOauthHref] = useState('')
   const [copied, setCopied] = useState('')
-
-  useEffect(() => {
-    const params = new URLSearchParams(location.search)
-    if (params.get('discord') !== 'linked') return
-    const username = params.get('username') ?? ''
-    const token = params.get('discord_link_token') ?? ''
-    if (username) {
-      setApplicant((previous) => ({ ...previous, discord_username: username }))
-    }
-    // Discord kimliği yalnızca imzalı bağlantı belirteciyle doğrulanır.
-    if (token) {
-      setDiscordLinkToken(token)
-      setDiscordLinked(true)
-    }
-    if (location.search) navigate(`${location.pathname}${location.hash}`, { replace: true })
-  }, [location.search, location.pathname, location.hash, navigate])
-
-  useEffect(() => {
-    if (!position || discordLinked) return
-    let active = true
-    void requestDiscordLinkToken()
-      .then((token) => {
-        if (!active) return
-        setDiscordLinkToken(token)
-        setOauthHref(getDiscordOAuthUrl(withBasePath(location.pathname), token))
-      })
-      .catch(() => {
-        if (active) setOauthHref('')
-      })
-    return () => {
-      active = false
-    }
-  }, [position?.slug, location.pathname, discordLinked])
 
   useEffect(() => {
     if (!position) return
@@ -395,12 +356,10 @@ export function ApplyPage() {
         applicant: {
           ...applicant,
           age: Number(applicant.age),
-          discord_linked: discordLinked,
         },
         answers,
         website,
         elapsed_ms: computeElapsedMs(mountedAt.current),
-        discord_link_token: discordLinkToken,
       })
       setSubmission(result)
       goToTop()
@@ -603,6 +562,7 @@ export function ApplyPage() {
                     <Field name="discord_username" label="Discord kullanıcı adı">
                       <Input
                         label="Discord kullanıcı adı"
+                        required
                         placeholder="Örn. luminacraft"
                         value={applicant.discord_username}
                         error={errors.discord_username}
@@ -676,36 +636,6 @@ export function ApplyPage() {
                       hint="En az 40 karakter • Kendini tanıtman başvurunun değerlendirilmesinde önemli."
                     />
                   </Field>
-
-                  <div className="flex flex-col gap-3 rounded-lg border border-cyan-350/20 bg-cyan-350/5 p-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex items-start gap-3">
-                      <Link2 size={18} className="mt-0.5 shrink-0 text-cyan-300" aria-hidden="true" />
-                      <div>
-                        <p className="text-sm font-medium text-cyan-100">Discord hesabını bağla <span className="font-normal text-cyan-200/60">(isteğe bağlı)</span></p>
-                        <p className="mt-1 text-xs leading-relaxed text-cyan-100/60">
-                          Bağlamadan da başvurunu gönderebilirsin.
-                        </p>
-                      </div>
-                    </div>
-                    {discordLinked ? (
-                      <Badge variant="success" className="shrink-0 self-start">
-                        <BadgeCheck size={14} aria-hidden="true" />
-                        Bağlandı {applicant.discord_username ? `· ${applicant.discord_username}` : ''}
-                      </Badge>
-                    ) : (
-                      <a
-                        href={oauthHref}
-                        aria-disabled={!oauthHref}
-                        onClick={(event) => {
-                          if (!oauthHref) event.preventDefault()
-                        }}
-                        className="btn-minecraft shrink-0 self-start"
-                      >
-                        <Gift size={15} aria-hidden="true" />
-                        Discord hesabını bağlan
-                      </a>
-                    )}
-                  </div>
                 </section>
               )}
 

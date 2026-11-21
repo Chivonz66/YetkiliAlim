@@ -204,7 +204,6 @@ export default function AdminDashboardPage() {
           <ul className="space-y-3 text-sm text-slate-400">
             <li className="flex gap-2"><CheckCircle2 size={16} className="mt-0.5 shrink-0 text-emerald-300" /> Başvuru detayından puan ve özel not ekleyebilirsiniz.</li>
             <li className="flex gap-2"><CheckCircle2 size={16} className="mt-0.5 shrink-0 text-emerald-300" /> Soruları sürükleyerek sıralayabilir, klavye ile de taşıyabilirsiniz.</li>
-            <li className="flex gap-2"><CheckCircle2 size={16} className="mt-0.5 shrink-0 text-emerald-300" /> Karar sonrası Discord bildirimi otomatik kuyruğa alınır.</li>
           </ul>
           <Link to="/admin/settings" className="mt-5 inline-flex items-center gap-1 text-sm text-emerald-300 hover:underline">
             Ayarları gözden geçir <ArrowRight size={14} />

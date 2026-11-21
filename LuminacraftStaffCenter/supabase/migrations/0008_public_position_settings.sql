@@ -13,7 +13,6 @@ CREATE POLICY "Herkes public ayarlari okuyabilir"
       'site_title',
       'applications_open',
       'closed_message',
-      'discord_enabled',
       'min_minecraft_age_months',
       'rate_limit_per_ip_per_hour'
     )

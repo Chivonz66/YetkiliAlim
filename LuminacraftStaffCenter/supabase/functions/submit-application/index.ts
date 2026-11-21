@@ -9,7 +9,6 @@ import {
   hashIp,
   isHumanSubmission,
   sha256Hex,
-  verifySessionToken,
 } from '../_shared/pure.ts'
 import { defaultMessage, error, json } from '../_shared/responses.ts'
 import { readJson, validate } from '../_shared/validation.ts'
@@ -88,22 +87,6 @@ async function incrementRateLimit(
   return Number.isFinite(count) && count > 0 && count <= limit
 }
 
-interface VerifiedDiscordLink {
-  userId: string
-  username: string
-}
-
-/** OAuth geri dönüşünde üretilen imzalı belirteci doğrular; istemci kimliği asla güvenilmez. */
-function verifyDiscordLink(token: unknown, fallbackUsername: string): VerifiedDiscordLink | null {
-  const secret = env('SESSION_SECRET')
-  if (!secret || typeof token !== 'string' || !token) return null
-  const payload = verifySessionToken(token, secret)
-  if (!payload || !payload.nonce.startsWith('discord-link:bound:')) return null
-  if (!/^\d{5,25}$/.test(payload.sub)) return null
-  const username = fallbackUsername.trim().slice(0, 64) || payload.sub
-  return { userId: payload.sub, username }
-}
-
 function textOrNull(value: unknown): string | null {
   if (typeof value !== 'string') return null
   const trimmed = value.trim()
@@ -122,11 +105,10 @@ function normalizeSubmission(raw: Record<string, unknown>): Record<string, unkno
   const minecraft = String(
     applicant.minecraft_username ?? raw.applicant_minecraft_username ?? raw.applicant_name ?? '',
   ).trim()
-  const discordRaw = String(
+  const discord = String(
     applicant.discord_username ?? raw.applicant_discord_username ?? raw.discord_username ?? '',
   ).trim()
-  // Şema applicant_discord_username alanını NOT NULL ve en az 3 karakterli zorunlu kılar.
-  const discord = /^[A-Za-z0-9_.]{3,32}$/.test(discordRaw) ? discordRaw : minecraft
+  // Discord kullanıcı adı zorunludur; geçersizse şema reddeder, Minecraft adına düşülmez.
   const ageRaw = applicant.age ?? raw.age
   const hoursRaw =
     applicant.daily_hours ?? raw.daily_hours ?? applicant.hours_per_week ?? raw.hours_per_week
@@ -216,16 +198,6 @@ async function run(req: Request): Promise<Response> {
   const parsed = await readJson(req)
   if (!parsed.ok) return error(parsed.error, 400, 'invalid_body')
   const raw = parsed.data as Record<string, unknown>
-  const rawApplicant =
-    raw.applicant && typeof raw.applicant === 'object'
-      ? (raw.applicant as Record<string, unknown>)
-      : {}
-  const discordLinkToken =
-    typeof raw.discord_link_token === 'string'
-      ? raw.discord_link_token
-      : typeof rawApplicant.discord_link_token === 'string'
-        ? rawApplicant.discord_link_token
-        : ''
   const normalized = normalizeSubmission(raw)
   const checked = await validate<ApplicationData>('application', normalized)
   if (!checked.ok) return error(checked.error, 400, 'validation')
@@ -300,17 +272,6 @@ async function run(req: Request): Promise<Response> {
     }
   }
 
-  let discordLink: VerifiedDiscordLink | null = null
-  if (discordLinkToken) {
-    if (!env('SESSION_SECRET')) {
-      return error('Oturum sistemi yapılandırılmamış: SESSION_SECRET tanımlanmalı.', 503, 'configuration')
-    }
-    discordLink = verifyDiscordLink(discordLinkToken, data.applicant_discord_username)
-    if (!discordLink) {
-      return error('Discord bağlantısı doğrulanamadı.', 400, 'invalid_link_token')
-    }
-  }
-
   const trackingNo = createTrackingNo(new Date().getUTCFullYear(), randomBytes(12))
   const queryToken = bytesToHex(randomBytes(32))
   const tokenHash = sha256Hex(queryToken)
@@ -331,15 +292,6 @@ async function run(req: Request): Promise<Response> {
     submitted_at: submittedAt,
     source_ip_hash: hashIp(ip, ipSalt),
   }
-  // Başvuru, cevaplar ve Discord bağlantısı tek veritabanı işleminde yazılır.
-  const inserted = await client.rpc('submit_application_atomic', {
-    p_application: applicationRow,
-    p_answers: answerRows,
-    p_discord_user_id: discordLink?.userId ?? null,
-    p_discord_username: discordLink?.username ?? null,
-  })
-  if (inserted.error || !inserted.data) return error(defaultMessage(500), 500, 'database')
-
   const answerRows = questions
     .filter((question) => !isEmptyAnswer(submitted[question.id]))
     .map((question) => {
@@ -357,6 +309,13 @@ async function run(req: Request): Promise<Response> {
         value: submitted[question.id] ?? null,
       }
     })
+
+  // Başvuru ve cevaplar tek veritabanı işleminde yazılır.
+  const inserted = await client.rpc('submit_application_atomic', {
+    p_application: applicationRow,
+    p_answers: answerRows,
+  })
+  if (inserted.error || !inserted.data) return error(defaultMessage(500), 500, 'database')
 
   return json(
     { ok: true, tracking_no: trackingNo, query_token: queryToken },

@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
@@ -34,7 +34,6 @@ const GEREKLI_DOSYALAR: ReadonlyArray<string> = [
   'LuminacraftStaffCenter/README.md',
   'LuminacraftStaffCenter/docs/kurulum.md',
   'LuminacraftStaffCenter/docs/github-pages.md',
-  'LuminacraftStaffCenter/docs/discord-oauth.md',
   'LuminacraftStaffCenter/docs/edge-functions.md',
   'LuminacraftStaffCenter/docs/guvenlik.md',
   'LuminacraftStaffCenter/tests/docs-check.test.ts',
@@ -51,13 +50,13 @@ const GEREKLI_DOSYALAR: ReadonlyArray<string> = [
   'LuminacraftStaffCenter/supabase/migrations/0006_decision_notify.sql',
   'LuminacraftStaffCenter/supabase/migrations/0007_live_reconciliation.sql',
   'LuminacraftStaffCenter/supabase/migrations/0008_public_position_settings.sql',
+  'LuminacraftStaffCenter/supabase/migrations/0009_remove_discord_integrations.sql',
 ]
 
 const DOKUMANLAR = [
   'LuminacraftStaffCenter/README.md',
   'LuminacraftStaffCenter/docs/kurulum.md',
   'LuminacraftStaffCenter/docs/github-pages.md',
-  'LuminacraftStaffCenter/docs/discord-oauth.md',
   'LuminacraftStaffCenter/docs/edge-functions.md',
   'LuminacraftStaffCenter/docs/guvenlik.md',
 ] as const
@@ -71,8 +70,6 @@ const UC_LAR = [
   'admin-settings',
   'public-status',
   'submit-application',
-  'discord-oauth',
-  'discord-notify',
 ] as const
 
 /** JWT benzeri, 50+ karakterli hex veya özel anahtar satırı arar. */
@@ -158,6 +155,9 @@ describe('doküman ve dağıtım dosyaları', () => {
     expect(wf).not.toContain('secrets.')
     expect(wf).not.toContain('SUPABASE_SERVICE_ROLE_KEY')
     expect(wf).not.toContain('DISCORD_BOT_TOKEN')
+    expect(wf).not.toContain('DISCORD_CLIENT_ID')
+    expect(wf).not.toContain('DISCORD_CLIENT_SECRET')
+    expect(wf).not.toContain('DISCORD_REDIRECT_URI')
     expect(wf).not.toContain('SESSION_SECRET')
     expect(wf).not.toMatch(/password\s*:/i)
     expect(siraIzleri(wf)).toEqual([])
@@ -186,7 +186,7 @@ describe('doküman ve dağıtım dosyaları', () => {
     const readme = oku(join(LSC, 'README.md'))
     for (const anahtar of [
       'Supabase',
-      'Discord',
+      'Discord kullanıcı adı',
       'GitHub Pages',
       'Edge Functions',
       'ilk yönetici',
@@ -204,12 +204,14 @@ describe('doküman ve dağıtım dosyaları', () => {
     for (const baglanti of [
       'docs/kurulum.md',
       'docs/github-pages.md',
-      'docs/discord-oauth.md',
       'docs/edge-functions.md',
       'docs/guvenlik.md',
     ]) {
       expect(readme).toContain(baglanti)
     }
+    expect(readme).not.toContain('docs/discord-oauth.md')
+    expect(readme).toContain('0009_remove_discord_integrations.sql')
+    expect(readme).toContain('8 Edge Function')
   })
 
   it('kurulum.md t kurulum adımlarını ve göç sırasını içeriyor', () => {
@@ -224,6 +226,8 @@ describe('doküman ve dağıtım dosyaları', () => {
       '0006_decision_notify.sql',
       '0007_live_reconciliation.sql',
       '0008_public_position_settings.sql',
+      '0009_remove_discord_integrations.sql',
+      'Discord kullanıcı adı',
       'ADMIN_SETUP_SECRET',
       '.env.example',
       'VITE_SUPABASE_ANON_KEY',
@@ -258,28 +262,52 @@ describe('doküman ve dağıtım dosyaları', () => {
     }
   })
 
-  it('discord-oauth.md callback, bot ve DM hatalarını anlatıyor', () => {
-    const discord = doc('discord-oauth.md')
-    for (const anahtar of [
-      'discord-oauth?action=callback',
+  it('Discord hesap bağlama ve DM bildirimleri dokümanlardan kaldırıldı', () => {
+    const kaldirilan = [
+      'discord-oauth',
+      'discord-notify',
+      'discord_link_token',
+      'discord_user_id',
+      'discord_connected',
+      'discord_enabled',
+      'oauth_state_hash',
+      'notification_queue',
+      'discord_links',
+      'notification_status',
       'DISCORD_CLIENT_ID',
       'DISCORD_CLIENT_SECRET',
       'DISCORD_REDIRECT_URI',
       'DISCORD_BOT_TOKEN',
-      'identify',
-      'state',
-      'Yeniden Dene',
-      'DM',
-    ]) {
-      expect(discord).toContain(anahtar)
+    ]
+    for (const goreli of DOKUMANLAR) {
+      const metin = oku(join(KOK, goreli))
+      for (const terim of kaldirilan) {
+        expect(metin, `${goreli} içinde ${terim} olmamalı`).not.toContain(terim)
+      }
+      expect(metin).not.toMatch(/privileged gateway intents/i)
+      expect(metin).not.toContain('docs/discord-oauth.md')
     }
-    expect(discord).toMatch(/privileged gateway intents/i)
-    expect(discord).toMatch(/gerekmez/i)
+
+    for (const goreli of [
+      'LuminacraftStaffCenter/README.md',
+      'LuminacraftStaffCenter/docs/kurulum.md',
+      'LuminacraftStaffCenter/docs/edge-functions.md',
+      'LuminacraftStaffCenter/docs/guvenlik.md',
+    ]) {
+      const metin = oku(join(KOK, goreli))
+      expect(metin, goreli).toContain('Discord kullanıcı adı')
+      expect(metin, goreli).toContain('3–32')
+      expect(metin, goreli).toMatch(/OAuth|DM bildirimi/)
+    }
   })
 
-  it('edge-functions.md 10 uç ve ortak güvenlik başlıklarını içeriyor', () => {
+  it('edge-functions.md 8 uç ve ortak güvenlik başlıklarını içeriyor', () => {
+    expect(UC_LAR).toHaveLength(8)
     const edge = doc('edge-functions.md')
+    expect(edge).toContain('8 Uç')
     for (const uc of UC_LAR) expect(edge, `${uc} anlatılmalı`).toContain(uc)
+    expect(edge).not.toContain('discord-oauth')
+    expect(edge).not.toContain('discord-notify')
     for (const anahtar of [
       'CSRF',
       'x-csrf-token',
@@ -342,8 +370,14 @@ describe('doküman ve dağıtım dosyaları', () => {
   })
 
   it('Edge uçlarının kaynak dosyaları dokümanlarla tutarlı', () => {
+    const dizin = join(LSC, 'supabase/functions')
+    const uclar = readdirSync(dizin, { withFileTypes: true })
+      .filter((giris) => giris.isDirectory() && giris.name !== '_shared')
+      .map((giris) => giris.name)
+      .sort()
+    expect(uclar).toEqual([...UC_LAR].sort())
     for (const uc of UC_LAR) {
-      const kaynak = oku(join(LSC, 'supabase/functions', uc, 'index.ts'))
+      const kaynak = oku(join(dizin, uc, 'index.ts'))
       expect(kaynak).toContain('Deno.serve')
       expect(doc('edge-functions.md')).toContain(uc)
     }

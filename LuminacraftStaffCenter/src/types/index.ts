@@ -13,8 +13,6 @@ export type QuestionType =
 
 export type ApplicationStatus = 'pending' | 'reviewing' | 'accepted' | 'rejected'
 
-export type ApplicationNotificationStatus = 'none' | 'queued' | 'pending' | 'sent' | 'failed'
-
 export type PositionSlug = 'rehber' | 'aac'
 
 export type ScoreCriterionKey =
@@ -83,8 +81,6 @@ export interface Application {
   position_slug: PositionSlug
   applicant_minecraft_username: string
   applicant_discord_username: string
-  discord_user_id: string | null
-  discord_connected: boolean
   age: number | null
   daily_hours: number | null
   minecraft_experience: string | null
@@ -95,7 +91,6 @@ export interface Application {
   updated_at: string
   decided_at: string | null
   decided_by: string | null
-  notification_status: ApplicationNotificationStatus
   source_ip_hash: string | null
   /** Eski yönetim listesi sıralaması için `submitted_at` takma adı; DB sütunu değildir. */
   created_at?: string
@@ -165,29 +160,6 @@ export interface AdminSession {
   expires_at: string
   created_at: string
   revoked_at: string | null
-}
-
-/** discord_links tablosu. */
-export interface DiscordLink {
-  discord_user_id: string
-  discord_username: string
-  application_id: string | null
-  linked_at: string
-  oauth_state_hash: string | null
-}
-
-/** notification_queue tablosu. */
-export interface DiscordNotification {
-  id: string
-  application_id: string
-  discord_user_id: string | null
-  kind: string
-  payload: Record<string, unknown>
-  status: 'pending' | 'sent' | 'failed'
-  attempts: number
-  last_error: string | null
-  created_at: string
-  sent_at: string | null
 }
 
 /** app_settings tablosu; value jsonb olduğu için tipi serbesttir. */

@@ -463,7 +463,7 @@ export function isValidMinecraftUsername(value: unknown): boolean {
 }
 
 export function isValidDiscordUsername(value: unknown): boolean {
-  return typeof value === 'string' && /^[a-zA-Z0-9._]{2,32}$/.test(value)
+  return typeof value === 'string' && /^[A-Za-z0-9_.]{3,32}$/.test(value)
 }
 
 /** Başvuru yaşı 16–99 (canonical aralık; şema, tohum ve UI ile aynı). */
@@ -586,11 +586,6 @@ export function buildAuditRow(
   }
 }
 
-/** Yeniden gönder yalnızca başarısız bildirimler için geçerlidir. */
-export function canRetryNotification(status: unknown): boolean {
-  return status === 'failed'
-}
-
 /** Günlük aktivite seçeneğini şemadaki sayısal daily_hours aralığına eşler. */
 export function dailyActivityToHours(value: unknown): number {
   const map: Record<string, number> = {
@@ -606,29 +601,4 @@ export function dailyActivityToHours(value: unknown): number {
     if (Number.isFinite(numeric)) return Math.min(24, Math.max(0, numeric))
   }
   return 0
-}
-
-/** Discord OAuth geri dönüş adresi yalnızca yapılandırılmış originlere izin verir. */
-export function isSafeReturnTo(value: unknown, allowed: string[] = getAllowedOrigins()): boolean {
-  if (typeof value !== 'string' || !value || value.startsWith('//')) return false
-  try {
-    const base = allowed.find((item) => {
-      try {
-        return Boolean(new URL(item))
-      } catch {
-        return false
-      }
-    }) ?? DEFAULT_ALLOWED_ORIGIN
-    const target = new URL(value, base)
-    if (value.startsWith('/')) return target.origin === new URL(base).origin
-    return allowed.some((item) => {
-      try {
-        return new URL(item).origin === target.origin
-      } catch {
-        return false
-      }
-    })
-  } catch {
-    return false
-  }
 }

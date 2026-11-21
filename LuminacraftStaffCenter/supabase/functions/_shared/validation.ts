@@ -33,7 +33,6 @@ type SchemaName =
   | 'note'
   | 'settingsPatch'
   | 'decision'
-  | 'notify'
 
 let schemasPromise: Promise<Record<SchemaName, Schema>> | null = null
 
@@ -117,7 +116,12 @@ async function getSchemas(): Promise<Record<SchemaName, Schema>> {
           .object({
             position_slug: z.enum(['rehber', 'aac']),
             applicant_minecraft_username: z.string().trim(),
-            applicant_discord_username: z.string().trim(),
+            applicant_discord_username: z
+              .string()
+              .trim()
+              .min(3, 'Discord kullanıcı adı zorunludur.')
+              .max(32)
+              .regex(/^[A-Za-z0-9_.]{3,32}$/, 'Geçersiz Discord kullanıcı adı.'),
             age: z.number(),
             daily_hours: z.number(),
             minecraft_experience: z.string().max(4000).nullable().optional(),
@@ -200,10 +204,6 @@ async function getSchemas(): Promise<Record<SchemaName, Schema>> {
         decision: z.object({
           status: z.enum(['pending', 'reviewing', 'accepted', 'rejected']),
           note: z.string().max(1000).optional(),
-        }),
-        notify: z.object({
-          application_id: z.string().uuid().optional(),
-          notification_id: z.string().uuid().optional(),
         }),
       } as Record<SchemaName, Schema>
     })()

@@ -19,7 +19,6 @@ import type {
   QuestionOption,
   QuestionType,
   SystemSetting,
-  DiscordNotification,
 } from '../types'
 import type { SettingsMap } from './api-public'
 import { BASE_PATH, withBasePath } from './constants'
@@ -362,7 +361,7 @@ export async function updateApplicationStatus(
   id: string,
   status: ApplicationStatus,
   note?: string,
-): Promise<{ ok: boolean; application: Application; notification_status?: string }> {
+): Promise<{ ok: boolean; application: Application }> {
   return request('admin-applications', {
     method: 'PATCH',
     body: { id, status, ...(note?.trim() ? { note: note.trim() } : {}) },
@@ -410,7 +409,7 @@ export async function addNote(
 }
 
 // ---------------------------------------------------------------------------
-// Ayarlar ve Discord bildirimleri
+// Ayarlar
 // ---------------------------------------------------------------------------
 
 export interface SettingsResponse {
@@ -430,19 +429,4 @@ export async function updateSettings(settings: Record<string, string | number | 
     body: { settings },
   })
   return result.settings ?? {}
-}
-
-export async function listNotifications(applicationId?: string): Promise<DiscordNotification[]> {
-  const result = await request<{ ok: boolean; notifications: DiscordNotification[] }>('discord-notify', {
-    query: { action: 'list', application_id: applicationId },
-  })
-  return result.notifications ?? []
-}
-
-export async function sendNotification(applicationId: string): Promise<{ ok: boolean; notification_status: string; error?: string }> {
-  return request('discord-notify', { method: 'POST', body: { action: 'send', application_id: applicationId } })
-}
-
-export async function retryNotification(notificationId: string): Promise<{ ok: boolean; notification_status: string; error?: string }> {
-  return request('discord-notify', { method: 'POST', body: { action: 'retry', notification_id: notificationId } })
 }

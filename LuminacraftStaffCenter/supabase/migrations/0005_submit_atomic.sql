@@ -1,16 +1,15 @@
 -- Luminacraft Staff Center — atomik başvuru gönderimi ve hız sınırı sayacı.
 -- Bu göç yalnızca yeni fonksiyonlar ekler; 0001–0004 şemasını değiştirmez.
 -- Edge fonksiyonları service_role ile çağırır; anon/authenticated doğrudan erişemez.
+-- Discord hesap bağlama ve bildirim kuyruğu kaldırıldığı için RPC yalnızca
+-- başvuru + cevap yazar; Discord kullanıcı adı zorunlu bir başvuru alanıdır.
 
--- Başvuru + cevaplar + Discord bağlantısı tek bir veritabanı işleminde yazılır.
+-- Başvuru + cevaplar tek bir veritabanı işleminde yazılır.
 -- PL/pgSQL fonksiyonu tek bir işlemdir: herhangi bir INSERT hata verirse
 -- fonksiyonun tamamı geri alınır (kısmi başvuru kalmaz).
 CREATE OR REPLACE FUNCTION public.submit_application_atomic(
   p_application jsonb,
-  p_answers jsonb,
-  p_discord_user_id text DEFAULT NULL,
-  p_discord_username text DEFAULT NULL,
-  p_oauth_state_hash text DEFAULT NULL
+  p_answers jsonb
 )
 RETURNS uuid
 LANGUAGE plpgsql
@@ -19,8 +18,6 @@ SET search_path = public, pg_temp
 AS $$
 DECLARE
   v_application_id uuid;
-  v_linked boolean := p_discord_user_id IS NOT NULL AND btrim(p_discord_user_id) <> '';
-  v_discord_username text;
 BEGIN
   IF p_application IS NULL OR jsonb_typeof(p_application) <> 'object' THEN
     RAISE EXCEPTION 'Geçersiz başvuru verisi.' USING ERRCODE = '22023';
@@ -36,8 +33,6 @@ BEGIN
     position_slug,
     applicant_minecraft_username,
     applicant_discord_username,
-    discord_user_id,
-    discord_connected,
     age,
     daily_hours,
     minecraft_experience,
@@ -53,8 +48,6 @@ BEGIN
     p_application->>'position_slug',
     p_application->>'applicant_minecraft_username',
     p_application->>'applicant_discord_username',
-    CASE WHEN v_linked THEN p_discord_user_id ELSE NULL END,
-    v_linked,
     (p_application->>'age')::integer,
     (p_application->>'daily_hours')::numeric,
     p_application->>'minecraft_experience',
@@ -88,45 +81,15 @@ BEGIN
     item->'value'
   FROM jsonb_array_elements(COALESCE(p_answers, '[]'::jsonb)) AS answers(item);
 
-  -- Discord kimliği yalnızca doğrulanmış bağlantı belirteciyle gelir;
-  -- application_id istemciden alınmaz, yeni başvurunun kimliği kullanılır.
-  IF v_linked THEN
-    v_discord_username := COALESCE(
-      NULLIF(btrim(p_discord_username), ''),
-      p_application->>'applicant_discord_username',
-      p_discord_user_id
-    );
-
-    INSERT INTO public.discord_links (
-      discord_user_id,
-      discord_username,
-      application_id,
-      linked_at,
-      oauth_state_hash
-    )
-    VALUES (
-      p_discord_user_id,
-      v_discord_username,
-      v_application_id,
-      now(),
-      p_oauth_state_hash
-    )
-    ON CONFLICT (discord_user_id) DO UPDATE
-      SET discord_username = EXCLUDED.discord_username,
-          application_id = EXCLUDED.application_id,
-          linked_at = EXCLUDED.linked_at,
-          oauth_state_hash = COALESCE(EXCLUDED.oauth_state_hash, public.discord_links.oauth_state_hash);
-  END IF;
-
   RETURN v_application_id;
 END;
 $$;
 
-COMMENT ON FUNCTION public.submit_application_atomic(jsonb, jsonb, text, text, text) IS
-  'Başvuru, cevaplar ve doğrulanmış Discord bağlantısını tek işlemde yazar.';
+COMMENT ON FUNCTION public.submit_application_atomic(jsonb, jsonb) IS
+  'Başvuru ve cevapları tek işlemde yazar; Discord kullanıcı adı zorunlu bir başvuru alanıdır.';
 
-REVOKE ALL ON FUNCTION public.submit_application_atomic(jsonb, jsonb, text, text, text) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.submit_application_atomic(jsonb, jsonb, text, text, text) TO service_role;
+REVOKE ALL ON FUNCTION public.submit_application_atomic(jsonb, jsonb) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.submit_application_atomic(jsonb, jsonb) TO service_role;
 
 -- Saatlik hız sınırı INSERT ... ON CONFLICT ... RETURNING ile atomik artırılır.
 -- Ayrı SELECT + UPDATE/INSERT yarış durumunda limit aşımına yol açabileceğinden

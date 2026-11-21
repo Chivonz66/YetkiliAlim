@@ -94,8 +94,6 @@ CREATE TABLE IF NOT EXISTS public.applications (
   position_slug text NOT NULL,
   applicant_minecraft_username text NOT NULL,
   applicant_discord_username text NOT NULL,
-  discord_user_id text,
-  discord_connected boolean NOT NULL DEFAULT false,
   age integer,
   daily_hours numeric,
   minecraft_experience text,
@@ -106,7 +104,6 @@ CREATE TABLE IF NOT EXISTS public.applications (
   updated_at timestamptz NOT NULL DEFAULT now(),
   decided_at timestamptz,
   decided_by uuid,
-  notification_status text NOT NULL DEFAULT 'none' CHECK (notification_status IN ('none','queued','pending','sent','failed')),
   source_ip_hash text,
   CONSTRAINT applications_yas_araligi CHECK (age IS NULL OR (age >= 16 AND age <= 99)),
   CONSTRAINT applications_gunluk_saat_araligi CHECK (daily_hours IS NULL OR (daily_hours >= 0 AND daily_hours <= 24)),
@@ -247,31 +244,6 @@ CREATE TABLE IF NOT EXISTS public.rate_limits (
   window_start timestamptz NOT NULL,
   hit_count integer NOT NULL DEFAULT 1 CHECK (hit_count >= 0),
   PRIMARY KEY (key, window_start)
-);
-
--- Discord bağlantıları; OAuth durum anahtarının yalnızca özeti tutulur.
-CREATE TABLE IF NOT EXISTS public.discord_links (
-  discord_user_id text PRIMARY KEY,
-  discord_username text NOT NULL,
-  application_id uuid REFERENCES public.applications(id) ON DELETE SET NULL,
-  linked_at timestamptz NOT NULL DEFAULT now(),
-  oauth_state_hash text
-);
-
-COMMENT ON COLUMN public.discord_links.oauth_state_hash IS 'OAuth durum anahtarının tek yönlü özeti; ham değer saklanmaz.';
-
--- Bildirim kuyruğu (Discord gönderimleri).
-CREATE TABLE IF NOT EXISTS public.notification_queue (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  application_id uuid NOT NULL REFERENCES public.applications(id) ON DELETE CASCADE,
-  discord_user_id text,
-  kind text NOT NULL,
-  payload jsonb NOT NULL DEFAULT '{}'::jsonb,
-  status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','sent','failed')),
-  attempts integer NOT NULL DEFAULT 0 CHECK (attempts >= 0),
-  last_error text,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  sent_at timestamptz
 );
 
 -- Denetim kayıtları yalnızca eklenir; 0003 dosyasındaki tetikleyici UPDATE/DELETE'i engeller.

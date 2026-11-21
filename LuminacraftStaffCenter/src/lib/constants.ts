@@ -191,6 +191,4 @@ export const API_ENDPOINTS = {
   adminApplications: '/functions/v1/admin-applications',
   adminScores: '/functions/v1/admin-scores',
   adminSettings: '/functions/v1/admin-settings',
-  discordOAuth: '/functions/v1/discord-oauth',
-  discordNotify: '/functions/v1/discord-notify',
 } as const

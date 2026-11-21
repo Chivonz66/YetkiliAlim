@@ -7,26 +7,22 @@ Luminacraft topluluğu için **gerçek** ekip başvurusu, başvuru takibi ve per
 ## Mimarî (metin diyagramı)
 
 ```
-                     ┌──────────────────────────────────────┐
-                     │  Tarayıcı (React + React Router)     │
-                     │  /  /apply/:position  /status /admin │
-                     └───────────────┬──────────────────────┘
-                                     │ HTTPS (VITE_SUPABASE_URL)
-                                     │ apikey: anon, cookie: HttpOnly
-                     ┌───────────────▼──────────────────────┐
-                     │  Supabase Gateway (/functions/v1/*)  │
-                     │  10 Edge Function (Deno)             │
-                     │  oturum + CSRF + hız sınırı + doğrulama│
-                     └───────────────┬──────────────────────┘
-                                     │ service_role (yalnızca Edge içinde)
-                     ┌───────────────▼──────────────────────┐
-                     │  PostgreSQL (Supabase)               │
-                     │  RLS + tablolar + RPC + tetikleyiciler│
-                     └───────────────┬──────────────────────┘
-                                     │ OAuth2 / Bot API
-                     ┌───────────────▼──────────────────────┐
-                     │  Discord (opsiyonel: bağlama + DM)   │
-                     └──────────────────────────────────────┘
+                      ┌──────────────────────────────────────┐
+                      │  Tarayıcı (React + React Router)     │
+                      │  /  /apply/:position  /status /admin │
+                      └───────────────┬──────────────────────┘
+                                      │ HTTPS (VITE_SUPABASE_URL)
+                                      │ apikey: anon, cookie: HttpOnly
+                      ┌───────────────▼──────────────────────┐
+                      │  Supabase Gateway (/functions/v1/*)  │
+                      │   8 Edge Function (Deno)             │
+                      │  oturum + CSRF + hız sınırı + doğrulama│
+                      └───────────────┬──────────────────────┘
+                                      │ service_role (yalnızca Edge içinde)
+                      ┌───────────────▼──────────────────────┐
+                      │  PostgreSQL (Supabase)               │
+                      │  RLS + tablolar + RPC + tetikleyiciler│
+                      └──────────────────────────────────────┘
 
   Dağıtım: git push (master) → GitHub Actions → npm ci / npm test / npm run build
            → GitHub Pages artefaktı → https://KULLANICI.github.io/DEPO-ADI/
@@ -39,9 +35,13 @@ Luminacraft topluluğu için **gerçek** ekip başvurusu, başvuru takibi ve per
 - **Yönetim paneli:** Başvuru listeleme/filtreleme, detay, karar kaydı, kriter bazlı puanlama (ağırlıklar toplamı 100), yönetici notları, soru/pozisyon/ayar yönetimi.
 - **Oturum güvenliği:** PBKDF2-SHA256 parola özetleri, imzalı oturum belirteci, `HttpOnly` + `Secure` + `SameSite=None` çerez, çift gönderim CSRF.
 - **İstismar önlemleri:** IP bazlı hız sınırı, honeypot alanı, 3 saniyelik asgari doldurma süresi, sunucu tarafı Zod doğrulaması, allowlist CORS.
-- **Discord entegrasyonu (opsiyonel):** OAuth2 `identify` ile kullanıcı bağlama ve karar sonrası DM bildirimi; başarısız DM yönetim panelinden yeniden denenebilir.
+- **Discord kullanıcı adı:** Zorunlu bir başvuru alanıdır; hesap bağlama/OAuth akışı, bot veya DM bildirimi kullanılmaz.
 - **Denetlenebilirlik:** Durum geçişleri geçmiş tablosuna ve salt okunur denetim günlüğüne yazılır.
 - **Dağıtım:** Ücretsiz GitHub Pages + GitHub Actions; ücretli domain veya özel barındırma gerekmez.
+
+## Discord kullanıcı adı
+
+Discord kullanıcı adı, başvuru formunda kullanıcının kendisi tarafından yazılan **düz metin** bir alandır. 3–32 karakter uzunluğunda olmalı ve yalnızca harf, rakam, `.` ve `_` içermelidir. Bu alan hem istemcide hem Edge Function ve veritabanı tarafında doğrulanır. Discord hesap bağlama, OAuth, bot, özel mesaj (DM) bildirimi veya buna ait bir ayar yoktur.
 
 ## Teknoloji yığını
 
@@ -66,7 +66,7 @@ npm test                    # tüm birim metin/test kontrolleri
 npm run build               # tsc -b && vite build → dist/
 ```
 
-Ardından **mutlaka** Supabase göçlerini uygulayın, Edge gizli anahtarlarını tanımlayın, uçları dağıtın ve ilk yöneticiyi CLI ile oluşturun: bkz. [Kurulum](docs/kurulum.md).
+Ardından **mutlaka** dokuz SQL göçünü (`0001` → `0009`) uygulayın, Edge gizli anahtarlarını tanımlayın, uçları dağıtın ve ilk yöneticiyi CLI ile oluşturun: bkz. [Kurulum](docs/kurulum.md). `0006_decision_notify.sql` artık SQL içermeyen bir yer tutucudur; `0009_remove_discord_integrations.sql` eski Discord/DM veritabanı nesnelerini kaldırır.
 
 ## Belgeler
 
@@ -74,8 +74,7 @@ Ardından **mutlaka** Supabase göçlerini uygulayın, Edge gizli anahtarların�
 | --- | --- |
 | [Kurulum Kılavuzu](docs/kurulum.md) | Supabase projesi, göç sırası, `.env`, ilk yönetici, gizli anahtarlar, Edge dağıtımı, doğrulama ve sorun giderme |
 | [GitHub Pages Dağıtımı](docs/github-pages.md) | Pages ayarı, taban yol, iş akışı, SPA 404, yayınlama ve hata durumları |
-| [Discord OAuth ve Bot](docs/discord-oauth.md) | Uygulama/bot oluşturma, yönlendirme URL'si, bağlama akışı, DM hataları |
-| [Edge Functions](docs/edge-functions.md) | 10 uç için amaç, eylem, yetkilendirme, istek/yanıt örnekleri, gizli anahtarlar, loglar |
+| [Edge Functions](docs/edge-functions.md) | 8 uç için amaç, eylem, yetkilendirme, istek/yanıt örnekleri, gizli anahtarlar, loglar |
 | [Güvenlik Modeli](docs/guvenlik.md) | RLS, service_role ayrımı, PBKDF2, oturum/CSRF, rate limit, denetim, sır yönetimi |
 
 ## Ortam değişkenleri
@@ -94,14 +93,10 @@ Ardından **mutlaka** Supabase göçlerini uygulayın, Edge gizli anahtarların�
 | --- | --- | --- |
 | `SUPABASE_URL` | Evet | Sunucu tarafı proje URL'si (`VITE_SUPABASE_URL` yedeği okunur). |
 | `SUPABASE_SERVICE_ROLE_KEY` | Evet | Tüm veritabanı yazma işlemleri; **tarayıcıya asla gönderilmez**. |
-| `SESSION_SECRET` | Evet | Oturum belirteci HMAC imzası ve OAuth `state` özeti. |
+| `SESSION_SECRET` | Evet | Oturum belirteci HMAC imzası. |
 | `ADMIN_SETUP_SECRET` | Edge `setup` kullanılacaksa | `admin-auth` kurulum eylemi için `x-admin-setup-secret` başlığıyla karşılaştırılır; tanımlı değilse eylem kapalıdır. |
 | `RATE_LIMIT_SALT` | Önerilir | IP özetleme tuzu; ham IP saklanmaz. |
-| `ALLOWED_ORIGINS` | Üretimde evet | Virgülle ayrılmış izinli origin listesi (CORS + OAuth dönüşü). |
-| `DISCORD_CLIENT_ID` | Discord kullanılacaksa | OAuth2 uygulama kimliği. |
-| `DISCORD_CLIENT_SECRET` | Discord kullanılacaksa | OAuth2 sırrı; yalnızca Edge'de. |
-| `DISCORD_REDIRECT_URI` | Discord kullanılacaksa | `<SUPABASE_URL>/functions/v1/discord-oauth?action=callback`. |
-| `DISCORD_BOT_TOKEN` | DM bildirimi için | Bot belirteci; yalnızca Edge'de. |
+| `ALLOWED_ORIGINS` | Üretimde evet | Virgülle ayrılmış izinli origin listesi (CORS). |
 
 **İlk yönetici CLI'si için (komut satırında geçici):**
 `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `ADMIN_USERNAME`, `ADMIN_PASSWORD` (en az 12 karakter).
@@ -113,10 +108,9 @@ Ardından **mutlaka** Supabase göçlerini uygulayın, Edge gizli anahtarların�
 ## Bilinen sınırlamalar ve dış gereksinimler
 
 1. **Supabase projesi şarttır.** Tablo, RLS, RPC veya Edge uçları olmadan uygulama çalışmaz; mock veri yoktur.
-2. **Discord uygulaması/botu şart değildir, opsiyoneldir.** `discord_enabled` varsayılan olarak `false` gelir; OAuth/DM özellikleri ancak gizli anahtarlar tanımlanınca çalışır.
+2. **Discord hesap bağlama/OAuth/DM kullanılmaz.** Discord kullanıcı adı zorunlu bir form alanıdır (3–32 karakter; harf/rakam/`.`/`_`); doğrulama sunucu tarafında yapılır.
 3. **İlk yönetici CLI ile oluşturulmalıdır.** Göçlerden sonra `node scripts/create-first-admin.mjs` komutu çalıştırılmazsa giriş yapılamaz.
 4. **GitHub Pages, GitHub Actions kaynağıyla etkinleştirilmelidir.** Aksi halde iş akışı artefaktı yayınlanamaz.
 5. **Supabase Gateway ve CORS:** Uçlar özel oturum çerezi kullandığı için `--no-verify-jwt` ile dağıtılmalı; `ALLOWED_ORIGINS` üretim adresini içermelidir.
 6. **Başvuru hız sınırı atomiktir** (`increment_rate_limit(...)` RPC'si); giriş kilidi (`admin-auth`) ise okuma-yazma döngüsü kullandığından çok yüksek eşzamanlılıkta birkaç deneme eşiği aşabilir.
-7. **Discord DM'i kullanıcı ayarlarına bağlıdır.** Kullanıcı DM'leri kapattıysa bildirim `failed` olarak işaretlenir ve panelden yeniden denenebilir; kararın kendisi etkilenmez.
-8. **İlk yönetici kurulumu:** `admin-auth` uçundaki `setup` eylemi yalnızca `admins` tablosu boşken **ve** geçerli `x-admin-setup-secret` başlığı gönderildiğinde çalışır. Önerilen yol CLI'dir; detaylar [güvenlik belgesinde](docs/guvenlik.md) anlatılmıştır.
+7. **İlk yönetici kurulumu:** `admin-auth` uçundaki `setup` eylemi yalnızca `admins` tablosu boşken **ve** geçerli `x-admin-setup-secret` başlığı gönderildiğinde çalışır. Önerilen yol CLI'dir; detaylar [güvenlik belgesinde](docs/guvenlik.md) anlatılmıştır.

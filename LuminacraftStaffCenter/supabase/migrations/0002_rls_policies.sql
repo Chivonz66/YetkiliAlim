@@ -17,8 +17,6 @@ ALTER TABLE public.admins ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.admin_sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.app_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.rate_limits ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.discord_links ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.notification_queue ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 
 -- Herkese açık okuma: yalnızca etkin kayıtlar.
@@ -105,7 +103,6 @@ CREATE POLICY "Herkes public ayarlari okuyabilir"
       'site_title',
       'applications_open',
       'closed_message',
-      'discord_enabled',
       'min_minecraft_age_months',
       'rate_limit_per_ip_per_hour'
     )
@@ -116,16 +113,6 @@ GRANT SELECT ON public.app_settings TO anon, authenticated;
 DROP POLICY IF EXISTS "Hiz sinirlarina herkese acik erisim yok" ON public.rate_limits;
 CREATE POLICY "Hiz sinirlarina herkese acik erisim yok"
   ON public.rate_limits FOR ALL TO anon, authenticated
-  USING (false) WITH CHECK (false);
-
-DROP POLICY IF EXISTS "Discord baglantilarina herkese acik erisim yok" ON public.discord_links;
-CREATE POLICY "Discord baglantilarina herkese acik erisim yok"
-  ON public.discord_links FOR ALL TO anon, authenticated
-  USING (false) WITH CHECK (false);
-
-DROP POLICY IF EXISTS "Bildirim kuyruguna herkese acik erisim yok" ON public.notification_queue;
-CREATE POLICY "Bildirim kuyruguna herkese acik erisim yok"
-  ON public.notification_queue FOR ALL TO anon, authenticated
   USING (false) WITH CHECK (false);
 
 DROP POLICY IF EXISTS "Denetim kayitlarina herkese acik erisim yok" ON public.audit_logs;
@@ -155,7 +142,6 @@ RETURNS TABLE (
   status text,
   submitted_at timestamptz,
   decided_at timestamptz,
-  notification_status text,
   status_history jsonb
 )
 LANGUAGE plpgsql
@@ -174,7 +160,6 @@ BEGIN
     a.status,
     a.submitted_at,
     a.decided_at,
-    a.notification_status,
     COALESCE(
       (
         SELECT jsonb_agg(

@@ -1,12 +1,7 @@
-// Başvuru listesi/detayı ve karar kaydı. Karar, bildirim kuyruğuna eklenir.
+// Başvuru listesi/detayı ve karar kaydı. Karar denetim kaydına yazılır.
 import { requireAdmin } from '../_shared/auth.ts'
 import { preflight, withCors } from '../_shared/cors.ts'
-import {
-  decisionIdempotencyKey,
-  getAdminClient,
-  isDiscordEnabledSetting,
-  writeAudit,
-} from '../_shared/db.ts'
+import { getAdminClient, writeAudit } from '../_shared/db.ts'
 import { defaultMessage, error, json } from '../_shared/responses.ts'
 import { readJson, validate } from '../_shared/validation.ts'
 
@@ -14,21 +9,6 @@ type DecisionData = { status: 'pending' | 'reviewing' | 'accepted' | 'rejected';
 
 function safeSearch(value: string): string {
   return value.replace(/[,()%\\]/g, ' ').trim().slice(0, 100)
-}
-
-/** Aynı kuyruk satırının benzersizlik hatasını tanır. */
-function isDuplicateQueueRow(queued: any): boolean {
-  return queued?.error?.code === '23505' || /duplicate key|unique constraint/i.test(String(queued?.error?.message ?? ''))
-}
-
-async function discordEnabled(client: any): Promise<boolean> {
-  const setting = await client
-    .from('app_settings')
-    .select('key, value')
-    .eq('key', 'discord_enabled')
-    .maybeSingle()
-  if (setting.error) return false
-  return isDiscordEnabledSetting(setting.data ? [setting.data] : [])
 }
 
 async function single(client: any, id: string): Promise<Response> {
@@ -108,10 +88,8 @@ async function run(req: Request): Promise<Response> {
       if (!current.data) return error(defaultMessage(404), 404, 'not_found')
 
       const statusChanged = current.data.status !== checked.data.status
-      const finalStatus = ['accepted', 'rejected'].includes(checked.data.status)
       const note = typeof checked.data.note === 'string' ? checked.data.note.trim() : ''
       let application = current.data
-      let notificationStatus: 'pending' | 'skipped' = 'skipped'
       let auditWarning: string | null = null
 
       // Karar notu yöneticiye özel kayıttır; durum tetikleyicisiyle aynı
@@ -147,44 +125,9 @@ async function run(req: Request): Promise<Response> {
         application = applied.data
       }
 
-      if (statusChanged && finalStatus) {
-        if (await discordEnabled(client)) {
-          const linked = await client
-            .from('discord_links')
-            .select('discord_user_id')
-            .eq('application_id', id)
-            .maybeSingle()
-          const queued = await client.from('notification_queue').insert({
-            application_id: id,
-            discord_user_id: linked.data?.discord_user_id ?? null,
-            kind: 'discord',
-            status: 'pending',
-            idempotency_key: decisionIdempotencyKey(id, checked.data.status, decision.decided_at),
-            payload: {
-              tracking_no: current.data.tracking_no,
-              status: checked.data.status,
-              ...(note ? { note } : {}),
-            },
-          })
-          if (queued.error && !isDuplicateQueueRow(queued)) {
-            return error(defaultMessage(500), 500, 'database')
-          }
-          if (!queued.error) {
-            const marked = await client.from('applications').update({ notification_status: 'pending' }).eq('id', id)
-            if (marked.error) return error(defaultMessage(500), 500, 'database')
-          }
-          notificationStatus = 'pending'
-        } else {
-          const cleared = await client.from('applications').update({ notification_status: 'none' }).eq('id', id)
-          if (cleared.error) return error(defaultMessage(500), 500, 'database')
-          application = { ...application, notification_status: 'none' }
-        }
-      }
-
       return json({
         ok: true,
         application,
-        notification_status: notificationStatus,
         status_changed: statusChanged,
         ...(auditWarning ? { audit_warning: auditWarning } : {}),
       })

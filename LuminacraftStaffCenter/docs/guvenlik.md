@@ -4,9 +4,9 @@ Bu belge, Luminacraft Staff Center'ın gerçekten uyguladığı korumaları ve s
 
 ## 1. Veritabanı erişimi ve RLS
 
-- Tüm 17 tabloda **Row Level Security (RLS)** etkindir (`0002_rls_policies.sql`). Varsayılan davranış reddetmedir.
+- Tüm uygulama tablolarında **Row Level Security (RLS)** etkindir (`0002_rls_policies.sql`). Varsayılan davranış reddetmedir.
 - `anon` ve `authenticated` rolleri yalnızca **etkin** `positions`, `question_categories`, `questions`, `question_options`, `score_criteria` kayıtlarını `SELECT` edebilir. Bu tablolara yazma izni `REVOKE ALL` ile kaldırılmıştır.
-- Başvuru, cevap, puan, yönetici notu, geçmiş, yönetici/oturum kayıtları, `app_settings`, `rate_limits`, `discord_links`, `notification_queue` ve `audit_logs` için `anon`/`authenticated` rollerine açıkça `USING (false) WITH CHECK (false)` ilkeleri tanımlıdır.
+- Başvuru, cevap, puan, yönetici notu, geçmiş, yönetici/oturum kayıtları, `app_settings`, `rate_limits` ve `audit_logs` için `anon`/`authenticated` rollerine açıkça `USING (false) WITH CHECK (false)` ilkeleri tanımlıdır. Eski Discord/DM nesneleri `0009_remove_discord_integrations.sql` ile kaldırılmıştır.
 - Herkese açık okuma iki `SECURITY DEFINER` RPC ile sınırlıdır:
   - `get_public_questions(position_slug)`: yalnızca etkin soruları ve seçeneklerini döner.
   - `lookup_application(tracking_no, query_token)`: takip numarası **ve** sorgu anahtarının SHA-256 özeti eşleşirse yalnızca güvenli durum alanlarını döner.
@@ -17,7 +17,7 @@ Bu belge, Luminacraft Staff Center'ın gerçekten uyguladığı korumaları ve s
 - `SUPABASE_SERVICE_ROLE_KEY` yalnızca Supabase Edge Functions ortamındadır (`_shared/db.ts`); hiçbir yanıta, tarayıcı paketine, `.env` dosyasına veya GitHub Actions dosyasına eklenmez.
 - Tüm yazma/güncelleme/silme işlemleri bu sunucu istemcisiyle yapılır; tarayıcıdan gelen istek doğrudan korumalı tabloya yazamaz.
 - RLS'yi atlayan bu anahtarın gücü nedeniyle dağıtımda **yalnızca Edge secret'ı** olarak tutulur; CLI (`create-first-admin.mjs`) da anahtarı yalnızca çalışma anında ortam değişkeninden okur, diske yazmaz.
-- `admin-auth` ucundaki `setup` eylemi artık **ikili kapı** ile korunur: `admins` tablosu boş OLMALI **ve** istekte geçerli `x-admin-setup-secret` başlığı bulunmalıdır (Edge secret: `ADMIN_SETUP_SECRET`). Secret tanımlı değilse eylem `403 forbidden` döner; ilk yöneticiyi rastgele bir istekten oluşturma penceresi kapanır. Önerilen kurulum yolu CLI'dir.
+- `admin-auth` ucundaki `setup` eylemi **ikili kapı** ile korunur: `admins` tablosu boş OLMALI **ve** istekte geçerli `x-admin-setup-secret` başlığı bulunmalıdır (Edge secret: `ADMIN_SETUP_SECRET`). Secret tanımlı değilse eylem `403 forbidden` döner; ilk yöneticiyi rastgele bir istekten oluşturma penceresi kapanır. Önerilen kurulum yolu CLI'dir.
 
 ## 3. Parolalar: PBKDF2-SHA256
 
@@ -48,7 +48,7 @@ Bu belge, Luminacraft Staff Center'ın gerçekten uyguladığı korumaları ve s
 - **Honeypot:** Formdaki `website` alanı kullanıcıya görünmez olmalı; doldurulursa `400 honeypot` döner.
 - **Zaman eşiği:** `elapsed_ms >= 3000`; çok hızlı gönderimler `429 too_fast` ile reddedilir. Botların formu saniyeler içinde doldurması engellenir.
 - **Sunucu tarafı doğrulama:** Zod şemaları alan uzunluklarını, Minecraft/Discord kullanıcı adı desenlerini, yaş (**16–99**) ve saat (0–24) aralıklarını, cevap tiplerini zorunlu kılar. Soru metinleri ve seçenekler istemciden değil veritabanından okunur. Seçenek listesi boşsa seçim tipi cevaplar reddedilir.
-- **Hız sınırı güncellemesi:** Başvuru tarafı artık `0005_submit_atomic.sql` içindeki `increment_rate_limit(...)` RPC'siyle atomiktir (`INSERT ... ON CONFLICT ... RETURNING`). Giriş kilidi (`admin-auth`) hâlâ okuma-yazma döngüsü kullandığından çok yüksek eşzamanlılıkta birkaç deneme eşiği aşabilir; logları izlemek önerilir.
+- **Hız sınırı güncellemesi:** Başvuru tarafı `0005_submit_atomic.sql` içindeki `increment_rate_limit(...)` RPC'siyle atomiktir (`INSERT ... ON CONFLICT ... RETURNING`). Giriş kilidi (`admin-auth`) hâlâ okuma-yazma döngüsü kullandığından çok yüksek eşzamanlılıkta birkaç deneme eşiği aşabilir; logları izlemek önerilir.
 
 ## 7. XSS ve SQL enjeksiyonu
 
@@ -62,13 +62,16 @@ Bu belge, Luminacraft Staff Center'ın gerçekten uyguladığı korumaları ve s
 - **Sorgu anahtarı (query token):** Başvuru oluşturulurken 32 rastgele bayt üretilir; yalnızca `submit-application` yanıtında bir kez gösterilir. Veritabanında `query_token_hash` olarak 64 karakterli SHA-256 özeti tutulur; ham anahtar saklanmaz. Kaybolan anahtar geri getirilemez.
 - **Yönetici notları:** `application_notes` tablosunda tutulur; RLS ile anon/authenticated'a kapalıdır, `public-status` yanıtında yer almaz ve herkese açık hiçbir sorguda döndürülmez.
 - **Denetim:** Durum değişiklikleri tetikleyici ile `application_history` ve **salt okunur** `audit_logs` tablosuna yazılır; `0003_functions_triggers.sql` içindeki tetikleyici güncelleme/silme/kırpma işlemlerini hata ile reddeder. Yönetici eylemleri ayrıca `writeAudit` yardımcısıyla kaydedilir.
-- **OAuth state:** 32 rastgele bayt; 10 dakikalık `HttpOnly` çerez + `SESSION_SECRET` ile özetlenmiş veritabanı kaydı; ham state kalıcı olarak saklanmaz. Discord erişim belirteci hiç saklanmaz veya loglanmaz.
 - **Bilinen sınır:** Bazı yönetici eylemlerinde `writeAudit` yardımcısı tetikleyici kayıtlarından farklı kolom adları kullanır; denetim incelemesinde hem tablo kayıtlarını hem uç loglarını birlikte değerlendirin.
+
+## Discord kullanıcı adı
+
+Discord kullanıcı adı başvurunun zorunlu bir alanıdır: kullanıcı tarafından forma yazılan düz metindir, 3–32 karakter olmalı ve yalnızca harf, rakam, `.` ve `_` içermelidir. Zod şeması ve veritabanı kısıtı bu deseni zorunlu kılar. Discord hesap bağlama/OAuth akışı, bot veya DM bildirimi yoktur; erişim belirteci ya da bağlantı belirteci üretilmez, saklanmaz veya loglanmaz.
 
 ## 9. Sır döndürme (rotation)
 
-1. **SESSION_SECRET:** Yeni uzun rastgele değeri `supabase secrets set SESSION_SECRET=...` ile tanımlayın; oturum belirtecinin imzası değişeceği için tüm yöneticilerin yeniden giriş yapması gerekir. OAuth state özetleri de geçersiz olur; açık bağlama akışlarını tamamlayın.
-2. **SUPABASE_SERVICE_ROLE_KEY / Discord secret'ları:** Önce Supabase Dashboard / Discord Developer Portal'da **Reset Token / Regenerate** yapın, ardından `supabase secrets set` ile güncelleyin ve ilgili uçları yeniden dağıtın.
+1. **SESSION_SECRET:** Yeni uzun rastgele değeri `supabase secrets set SESSION_SECRET=...` ile tanımlayın; oturum belirtecinin imzası değişeceği için tüm yöneticilerin yeniden giriş yapması gerekir.
+2. **SUPABASE_SERVICE_ROLE_KEY:** Supabase Dashboard'da yeni anahtar oluşturun, `supabase secrets set` ile güncelleyin ve ilgili uçları yeniden dağıtın.
 3. **RATE_LIMIT_SALT:** Değiştirmek mevcut IP özetlerini geçersiz kılar (hız sınırı penceresi sıfırlanır); trafik yoğun olmayan bir zamanda yapın.
 4. Değişiklikten sonra `supabase functions list` ve uç loglarını kontrol edin; `configuration` hatası secret adı yazım hatasına işaret eder.
 
@@ -78,10 +81,9 @@ Aşağıdakiler bu depoda, `.env.example` içinde, iş akışında veya doküman
 
 - `SUPABASE_SERVICE_ROLE_KEY`, gerçek anon key veya JWT belirteci
 - `SESSION_SECRET`, `RATE_LIMIT_SALT`, `ADMIN_SETUP_SECRET`
-- `DISCORD_CLIENT_SECRET`, `DISCORD_BOT_TOKEN`
 - Yönetici kullanıcı adı/parolası, başvuranların e-posta/adres bilgileri
-- Ham sorgu anahtarı, oturum belirteci, CSRF değeri, OAuth `code`/`state`
+- Ham sorgu anahtarı, oturum belirteci, CSRF değeri
 
 `.env.example` yalnızca `https://sizin-projeniz.supabase.co`, `sizin-anon-keyiniz` ve `/` gibi yer tutucular içerir. Gerçek değerler yerel `.env` (git tarafından yok sayılır) veya Supabase Edge Secrets ortamındadır. Bir sır yanlışlıkla commit edilirse önce **döndürün**, sonra dosyayı düzeltin ve geçmişi temizleyin; sırrı silmek tek başına yeterli değildir.
 
-İlgili işlemler: [kurulum.md](kurulum.md), [edge-functions.md](edge-functions.md), [discord-oauth.md](discord-oauth.md).
+İlgili işlemler: [kurulum.md](kurulum.md), [edge-functions.md](edge-functions.md).

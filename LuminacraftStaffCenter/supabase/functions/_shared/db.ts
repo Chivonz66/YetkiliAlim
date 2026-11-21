@@ -5,9 +5,6 @@ import { buildAuditRow, env } from './pure.ts'
 export const CONFIG_ERROR =
   'Sunucu yapılandırması eksik: SUPABASE_URL ve SUPABASE_SERVICE_ROLE_KEY tanımlanmalı.'
 
-/** Discord özelliğinin tek geçerli ayar anahtarı. */
-export const DISCORD_ENABLED_SETTING = 'discord_enabled'
-
 type Client = {
   from: (table: string) => any
   rpc: (name: string, params?: Record<string, unknown>) => any
@@ -48,54 +45,6 @@ export async function getAdminClient(): Promise<
   } catch {
     return { ok: false, error: 'Veritabanı bağlantısı kurulamadı.' }
   }
-}
-
-/** Yalnızca discord_enabled açıkça doğruysa bildirim üretilir/gönderilir. */
-export function isDiscordEnabledSetting(
-  rows: Array<{ key?: string; value?: unknown }> | null | undefined,
-): boolean {
-  const row = rows?.find((item) => item?.key === DISCORD_ENABLED_SETTING)
-  const value = row?.value
-  return value === true || value === 'true' || value === 1
-}
-
-/** Aynı kararın ikinci kez kuyruğa alınmasını engelleyen doğal anahtar. */
-export function decisionIdempotencyKey(
-  applicationId: string,
-  status: string,
-  decidedAt: string,
-): string {
-  return `decision:${applicationId}:${status}:${decidedAt}`
-}
-
-/**
- * Karar notunun başvurana gösterilecek kopyası. Ekip notu ham hâliyle
- * saklanır; DM yalnızca bu süzülmüş, sınırlı kopyayı kullanır.
- */
-export function sanitizeCandidateNote(value: unknown): string {
-  if (typeof value !== 'string') return ''
-  return value
-    .replace(/[\u0000-\u001f\u007f]/g, ' ')
-    .replace(/<@[!&]?\d+>/g, '')
-    .replace(/<#\d+>/g, '')
-    .replace(/@(everyone|here)\b/gi, '$1')
-    .replace(/https?:\/\/\S+/gi, '')
-    .replace(/[<>]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 500)
-}
-
-/** Karar sonucu ve isteğe bağlı geri bildirim için sabit Türkçe DM şablonu. */
-export function buildDecisionMessage(
-  trackingNo: string,
-  status: string,
-  note?: unknown,
-): string {
-  const decision = status === 'accepted' ? 'kabul edildi' : 'reddedildi'
-  const feedback = sanitizeCandidateNote(note)
-  const detail = feedback ? ` Karar notu: ${feedback}.` : ''
-  return `Merhaba! ${trackingNo} numaralı Luminacraft ekip başvurunuz ${decision}.${detail} Bilgi ve geri bildirimler için ekip yöneticileriyle iletişime geçebilirsiniz.`
 }
 
 export type AuditWriteResult = { ok: true } | { ok: false; error: string }

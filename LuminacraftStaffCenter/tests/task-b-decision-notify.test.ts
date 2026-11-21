@@ -1,13 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import {
-  buildDecisionMessage,
-  decisionIdempotencyKey,
-  isDiscordEnabledSetting,
-  sanitizeCandidateNote,
-  writeAudit,
-} from '../supabase/functions/_shared/db.ts'
+import { writeAudit } from '../supabase/functions/_shared/db.ts'
 
 // Kaynak metin doğrulamaları canlı veritabanı veya ağ gerektirmez.
 const oku = (relative: string): string => readFileSync(join(process.cwd(), relative), 'utf8')
@@ -15,81 +9,72 @@ const kod = (relative: string): string =>
   oku(relative).replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
 
 const ADMIN = kod('supabase/functions/admin-applications/index.ts')
-const NOTIFY = kod('supabase/functions/discord-notify/index.ts')
 const DB = kod('supabase/functions/_shared/db.ts')
+const VALIDATION = kod('supabase/functions/_shared/validation.ts')
 const TETIKLEYICI = oku('supabase/migrations/0003_functions_triggers.sql')
 const GOC6 = oku('supabase/migrations/0006_decision_notify.sql')
+const GOC9 = oku('supabase/migrations/0009_remove_discord_integrations.sql')
 const AYARLAR = kod('src/pages/admin/SettingsPage.tsx')
+const DETAY = kod('src/pages/admin/ApplicationDetailPage.tsx')
+
+const KALDIRILAN_TERIMLER =
+  /discord-oauth|discord-notify|discord_link_token|discord_linked|discord_user_id|discord_connected|discord_enabled|oauth_state_hash|notification_queue|notification_status|buildDecisionMessage|sanitizeCandidateNote|decisionIdempotencyKey|canRetryNotification|DM bildirimi/i
 
 afterEach(() => {
   vi.restoreAllMocks()
 })
 
-describe('YA-08 — karar bildirimi tekilleştirmesi', () => {
-  it('idempotency anahtarı aynı karar için kararlı, farklı karar için benzersizdir', () => {
-    const bir = decisionIdempotencyKey('app-1', 'accepted', '2026-01-01T00:00:00.000Z')
-    expect(bir).toBe('decision:app-1:accepted:2026-01-01T00:00:00.000Z')
-    expect(decisionIdempotencyKey('app-1', 'accepted', '2026-01-01T00:00:00.000Z')).toBe(bir)
-    expect(decisionIdempotencyKey('app-1', 'rejected', '2026-01-01T00:00:00.000Z')).not.toBe(bir)
-    expect(decisionIdempotencyKey('app-2', 'accepted', '2026-01-01T00:00:00.000Z')).not.toBe(bir)
-  })
-
-  it('karar uç noktası yalnızca durum gerçekten değiştiğinde kuyruk oluşturur', () => {
+describe('YA-08 — karar kaydı bildirim kuyruğu olmadan tamamlanır', () => {
+  it('karar yalnızca durum gerçekten değiştiğinde denetim kaydı üretir', () => {
     expect(ADMIN).toContain('const statusChanged = current.data.status !== checked.data.status')
-    expect(ADMIN).toContain('if (statusChanged && finalStatus)')
-    expect(ADMIN).toContain("from('notification_queue').insert")
-    expect(ADMIN).toContain(
-      'idempotency_key: decisionIdempotencyKey(id, checked.data.status, decision.decided_at)',
+    expect(ADMIN).toContain("client.rpc('apply_application_decision'")
+    expect(ADMIN).toContain('...(auditWarning ? { audit_warning: auditWarning } : {})')
+    expect(ADMIN).not.toContain("from('notification_queue')")
+    expect(ADMIN).not.toContain('notification_status')
+    expect(ADMIN).not.toContain('discord_enabled')
+    expect(ADMIN).not.toContain('decisionIdempotencyKey')
+  })
+
+  it('0006 yer tutucudur; 0009 eski Discord/DM nesnelerini kaldırır', () => {
+    expect(GOC6).toContain('yer tutucu')
+    expect(GOC6).not.toContain('ALTER TABLE public.notification_queue')
+    expect(GOC6).not.toContain('CREATE OR REPLACE FUNCTION public.claim_')
+
+    expect(GOC9).toContain('DROP FUNCTION IF EXISTS public.claim_pending_notification(uuid)')
+    expect(GOC9).toContain('DROP FUNCTION IF EXISTS public.claim_failed_notification(uuid)')
+    expect(GOC9).toContain('DROP TABLE IF EXISTS public.notification_queue')
+    expect(GOC9).toContain('DROP TABLE IF EXISTS public.discord_links')
+    expect(GOC9).toContain('DROP COLUMN IF EXISTS discord_user_id')
+    expect(GOC9).toContain('DROP COLUMN IF EXISTS discord_connected')
+    expect(GOC9).toContain('DROP COLUMN IF EXISTS notification_status')
+    expect(GOC9).toContain("DELETE FROM public.app_settings WHERE key = 'discord_enabled'")
+    expect(GOC9).toContain('CREATE OR REPLACE FUNCTION public.submit_application_atomic(')
+    expect(GOC9).toContain('CREATE OR REPLACE FUNCTION public.lookup_application(')
+  })
+
+  it('eski 5 bağımsız değişkenli RPC ve eski durum sorgusu kaldırılır', () => {
+    expect(GOC9).toContain(
+      'DROP FUNCTION IF EXISTS public.submit_application_atomic(jsonb, jsonb, text, text, text)',
     )
-    expect(ADMIN).toContain("status: 'pending'")
-    expect(ADMIN).toContain("notification_status: 'pending'")
-  })
-
-  it('0006 göçü kuyruğa benzersiz anahtar ve tek bekleyen satır kısıtı ekler', () => {
-    expect(GOC6).toContain('ADD COLUMN IF NOT EXISTS idempotency_key text')
-    expect(GOC6).toContain('CREATE UNIQUE INDEX IF NOT EXISTS notification_queue_idempotency_key_unique')
-    expect(GOC6).toContain('CREATE UNIQUE INDEX IF NOT EXISTS notification_queue_one_pending_per_application')
-    expect(GOC6).toContain("WHERE status = 'pending'")
-    expect(GOC6).toContain('FOR UPDATE SKIP LOCKED')
-    expect(GOC6).toContain('claim_pending_notification')
-    expect(GOC6).toContain('claim_failed_notification')
-  })
-
-  it('gönderim, yeni kuyruk satırı açmadan tek bir bekleyen satırı kilitler', () => {
-    expect(NOTIFY).toContain("client.rpc('claim_pending_notification'")
-    expect(NOTIFY).toContain("client.rpc('claim_failed_notification'")
-    expect(NOTIFY).toContain('claimed_at: null')
-    expect(NOTIFY).not.toMatch(/\.from\('notification_queue'\)\s*\.insert/)
+    expect(GOC9).toContain('DROP FUNCTION IF EXISTS public.lookup_application(text, text)')
+    expect(GOC9).toContain('GRANT EXECUTE ON FUNCTION public.submit_application_atomic(jsonb, jsonb)')
+    expect(GOC9).not.toContain('notification_status text')
   })
 })
 
-describe('YA-09 — karar notunun saklanması ve kullanılması', () => {
-  it('not yönetici kaydı olarak saklanır ve kuyruk yükünde taşınır', () => {
+describe('YA-09 — karar notu yalnızca yönetici kaydıdır', () => {
+  it('not yönetici notu olarak saklanır; başvurana DM şablonu üretilmez', () => {
     expect(ADMIN).toContain("from('application_notes').insert")
     expect(ADMIN).toContain('admin_id: auth.adminId')
-    expect(ADMIN).toContain('...(note ? { note } : {})')
-    expect(NOTIFY).toContain('notificationPayload.note')
-    expect(NOTIFY).toContain('buildDecisionMessage(')
+    expect(ADMIN).toMatch(/application_id: id,\s*admin_id: auth\.adminId,\s*note,/)
+    expect(ADMIN).not.toContain('notificationPayload.note')
+    expect(ADMIN).not.toContain('buildDecisionMessage(')
+    expect(ADMIN).not.toContain('sanitizeCandidateNote(')
   })
 
-  it('DM şablonu Türkçe ve sabit yapıdadır; not ayrı bir satırda gösterilir', () => {
-    const withNote = buildDecisionMessage('LSC-2026-A2B3C4', 'accepted', 'Başvurunuz incelendi.')
-    expect(withNote).toContain('LSC-2026-A2B3C4 numaralı Luminacraft ekip başvurunuz kabul edildi.')
-    expect(withNote).toContain('Karar notu: Başvurunuz incelendi.')
-    expect(withNote).toContain('Bilgi ve geri bildirimler için ekip yöneticileriyle iletişime geçebilirsiniz.')
-
-    const withoutNote = buildDecisionMessage('LSC-2026-A2B3C4', 'rejected', '')
-    expect(withoutNote).toContain('reddedildi')
-    expect(withoutNote).not.toContain('Karar notu')
-  })
-
-  it('başvurana giden not kopyası Discord özel içeriklerinden arındırılır', () => {
-    expect(sanitizeCandidateNote('  @everyone https://example.com  kabul\n edildi  ')).toBe(
-      'everyone kabul edildi',
-    )
-    expect(sanitizeCandidateNote('<@123456789> <#987654321> merhaba')).toBe('merhaba')
-    expect(sanitizeCandidateNote('x'.repeat(900))).toHaveLength(500)
-    expect(buildDecisionMessage('LSC-2026-A2B3C4', 'accepted', '@everyone')).not.toContain('@everyone')
+  it('yönetici detayında bildirim durumu veya bağlantı rozeti yoktur', () => {
+    expect(DETAY).toContain('Discord kullanıcı adı')
+    expect(DETAY).not.toMatch(KALDIRILAN_TERIMLER)
   })
 })
 
@@ -130,31 +115,33 @@ describe('YA-12 — denetim hataları ve karar aktörü', () => {
   })
 })
 
-describe('YA-13 — discord_enabled kapısı', () => {
-  it('yalnızca tam discord_enabled anahtarı ve doğru değer etkin sayılır', () => {
-    expect(isDiscordEnabledSetting([{ key: 'discord_enabled', value: true }])).toBe(true)
-    expect(isDiscordEnabledSetting([{ key: 'discord_enabled', value: 'true' }])).toBe(true)
-    expect(isDiscordEnabledSetting([{ key: 'discord_enabled', value: false }])).toBe(false)
-    expect(isDiscordEnabledSetting([{ key: 'discord_enabled', value: 'false' }])).toBe(false)
-    expect(isDiscordEnabledSetting([{ key: 'other_discord_enabled', value: true }])).toBe(false)
-    expect(isDiscordEnabledSetting([])).toBe(false)
+describe('Discord hesabı bağlama ve DM bildirimleri kaldırıldı', () => {
+  it('Edge ve yönetim kaynaklarında eski akışlara ait çağrı kalmaz', () => {
+    const dosyalar = [
+      ADMIN,
+      DB,
+      VALIDATION,
+      kod('supabase/functions/submit-application/index.ts'),
+      kod('supabase/functions/public-status/index.ts'),
+      kod('supabase/functions/admin-settings/index.ts'),
+      kod('supabase/functions/_shared/auth.ts'),
+      kod('supabase/functions/_shared/pure.ts'),
+      AYARLAR,
+      DETAY,
+      kod('src/pages/ApplyPage.tsx'),
+      kod('src/lib/api-public.ts'),
+      kod('src/lib/api-admin.ts'),
+      kod('src/lib/constants.ts'),
+    ]
+    for (const kaynak of dosyalar) expect(kaynak).not.toMatch(KALDIRILAN_TERIMLER)
   })
 
-  it('kuyruk oluşturma ve gönderim aynı ayar anahtarına bağlıdır', () => {
-    expect(ADMIN).toContain(".eq('key', 'discord_enabled')")
-    expect(NOTIFY).toContain(".eq('key', 'discord_enabled')")
-    expect(ADMIN).toContain('if (await discordEnabled(client))')
-    expect(NOTIFY).toContain('if (!(await discordEnabled(client)))')
-    expect(ADMIN.indexOf("'discord_enabled'")).toBeLessThan(ADMIN.indexOf("from('notification_queue').insert"))
-    expect(NOTIFY.indexOf("'discord_enabled'")).toBeLessThan(NOTIFY.indexOf("client.rpc('claim_pending_notification'"))
-    expect(AYARLAR).toContain(
-      'hint="Kapalıyken kabul/red kararları için kuyruk oluşturulmaz; gönderim ve yeniden gönderim engellenir."',
+  it('Discord kullanıcı adı zorunlu ve sunucuda biçim olarak doğrulanır', () => {
+    expect(VALIDATION).toContain('Discord kullanıcı adı zorunludur.')
+    expect(VALIDATION).toContain('/^[A-Za-z0-9_.]{3,32}$/')
+    expect(kod('supabase/functions/submit-application/index.ts')).toContain(
+      'applicant_discord_username: discord',
     )
-  })
-
-  it('alıcı araması başvuru ve bağlantı tablolarında korunur', () => {
-    expect(NOTIFY).toContain('application.data.discord_user_id')
-    expect(NOTIFY).toContain("from('discord_links')")
-    expect(NOTIFY).toContain(".eq('application_id', applicationId)")
+    expect(AYARLAR).not.toMatch(/discord/i)
   })
 })
