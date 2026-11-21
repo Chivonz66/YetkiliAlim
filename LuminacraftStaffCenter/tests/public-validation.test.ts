@@ -8,6 +8,7 @@ import {
   buildApplicationPayload,
   computeElapsedMs,
   getClosedMessage,
+  getDiscordOAuthUrl,
   getQuestionOptions,
   getSettingFlag,
   groupQuestions,
@@ -15,6 +16,7 @@ import {
   isPositionOpen,
   mapPublicQuestion,
   normalizeAnswers,
+  positionOpenSettingKey,
 } from '../src/lib/api-public'
 import type { Question, QuestionType } from '../src/types'
 
@@ -270,6 +272,24 @@ describe('başvuru gönderimi güvenliği', () => {
     ])
     expect(answers).toEqual([{ question_id: 'q-9', value: true }])
   })
+
+  it('imzalı Discord bağlantı belirteci gövde ve OAuth başlangıç URL sinde taşınır', () => {
+    const payload = buildApplicationPayload({
+      position_slug: 'rehber',
+      applicant: { minecraft_username: 'Lumina' },
+      answers: {},
+      website: '',
+      elapsed_ms: 0,
+      discord_link_token: 'imzali-belirtek',
+    })
+    expect(payload.discord_link_token).toBe('imzali-belirtek')
+
+    const url = getDiscordOAuthUrl('/apply/rehber', 'imzali-belirtek')
+    expect(url).toContain('action=start')
+    expect(url).toContain('return_to=')
+    expect(url).toContain('discord_link_token=imzali-belirtek')
+    expect(getDiscordOAuthUrl('/apply/rehber', '')).not.toContain('discord_link_token')
+  })
 })
 
 describe('kapalı başvuru ve ayarlar', () => {
@@ -293,5 +313,25 @@ describe('kapalı başvuru ve ayarlar', () => {
     expect(isPositionOpen({ aac_applications_open: '0' }, 'aac', { is_active: true })).toBe(false)
     expect(isPositionOpen({}, 'rehber', { is_active: true })).toBe(true)
     expect(isPositionOpen({}, 'rehber', { is_active: false })).toBe(false)
+  })
+
+  it('pozisyon açıklığının tek kaynağı ${slug}_applications_open anahtarıdır', () => {
+    expect(positionOpenSettingKey('rehber')).toBe('rehber_applications_open')
+    expect(isPositionOpen({ rehber_applications_open: false }, 'rehber')).toBe(false)
+    expect(isPositionOpen({ rehber_applications_open: 'false' }, 'rehber')).toBe(false)
+    expect(isPositionOpen({ rehber_applications_open: true }, 'rehber')).toBe(true)
+    // Eski anahtarlar artık pozisyonu açık/kapalı yapmaz.
+    expect(isPositionOpen({ rehber_is_open: false, rehber_open: false }, 'rehber')).toBe(true)
+    expect(
+      isPositionOpen({ rehber_applications_open: true, applications_open: false }, 'rehber'),
+    ).toBe(false)
+  })
+
+  it('yaş alanı kanonik 16–99 aralığını kullanır', () => {
+    const ageBounds = { required: true, minLength: 16, maxLength: 99 }
+    expect(isAnswerValid('number', 16, ageBounds)).toBe(true)
+    expect(isAnswerValid('number', 99, ageBounds)).toBe(true)
+    expect(isAnswerValid('number', 15, ageBounds)).toBe(false)
+    expect(isAnswerValid('number', 100, ageBounds)).toBe(false)
   })
 })

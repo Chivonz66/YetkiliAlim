@@ -9,6 +9,7 @@ import {
   hashIp,
   isHumanSubmission,
   sha256Hex,
+  verifySessionToken,
 } from '../_shared/pure.ts'
 import { defaultMessage, error, json } from '../_shared/responses.ts'
 import { readJson, validate } from '../_shared/validation.ts'
@@ -69,34 +70,38 @@ async function readSetting(client: any, key: string, fallback: string): Promise<
   }
 }
 
-/** rate_limits tablosunda saatlik pencereyi (key, window_start, hit_count) günceller. */
-async function enforceRateLimit(client: any, key: string, limit: number): Promise<boolean> {
+/** 0005 göçündeki atomik UPSERT RPC'si ile saatlik sayacı artırır. */
+async function incrementRateLimit(
+  client: any,
+  key: string,
+  limit: number,
+): Promise<boolean> {
   const windowStart = new Date()
   windowStart.setUTCMinutes(0, 0, 0)
-  const at = windowStart.toISOString()
+  const result = await client.rpc('increment_rate_limit', {
+    p_key: key,
+    p_window_start: windowStart.toISOString(),
+    p_limit: limit,
+  })
+  if (result.error) return false
+  const count = Number(result.data)
+  return Number.isFinite(count) && count > 0 && count <= limit
+}
 
-  const existing = await client
-    .from('rate_limits')
-    .select('hit_count, window_start')
-    .eq('key', key)
-    .eq('window_start', at)
-    .maybeSingle()
-  if (existing.error) return false
+interface VerifiedDiscordLink {
+  userId: string
+  username: string
+}
 
-  const count = Number(existing.data?.hit_count ?? 0)
-  if (existing.data && Number.isFinite(count) && count >= limit) return false
-  if (existing.data) {
-    const updated = await client
-      .from('rate_limits')
-      .update({ hit_count: count + 1 })
-      .eq('key', key)
-      .eq('window_start', at)
-    return !updated.error
-  }
-  const upsert = await client
-    .from('rate_limits')
-    .upsert({ key, window_start: at, hit_count: 1 }, { onConflict: 'key,window_start' })
-  return !upsert.error
+/** OAuth geri dönüşünde üretilen imzalı belirteci doğrular; istemci kimliği asla güvenilmez. */
+function verifyDiscordLink(token: unknown, fallbackUsername: string): VerifiedDiscordLink | null {
+  const secret = env('SESSION_SECRET')
+  if (!secret || typeof token !== 'string' || !token) return null
+  const payload = verifySessionToken(token, secret)
+  if (!payload || !payload.nonce.startsWith('discord-link:bound:')) return null
+  if (!/^\d{5,25}$/.test(payload.sub)) return null
+  const username = fallbackUsername.trim().slice(0, 64) || payload.sub
+  return { userId: payload.sub, username }
 }
 
 function textOrNull(value: unknown): string | null {
@@ -184,11 +189,14 @@ function answerValid(question: Question, answer: AnswerValue | undefined, option
       return true
     }
     case 'single_choice':
-      return typeof answer === 'string' && (values.length === 0 || values.includes(answer))
+      // Etkin seçenek yoksa hiçbir cevap kabul edilmez; istemci serbest metin gönderemez.
+      return values.length > 0 && typeof answer === 'string' && values.includes(answer)
     case 'multiple_choice':
       return (
+        values.length > 0 &&
         Array.isArray(answer) &&
-        answer.every((item) => typeof item === 'string' && (values.length === 0 || values.includes(item)))
+        answer.length > 0 &&
+        answer.every((item) => typeof item === 'string' && values.includes(item))
       )
     case 'yes_no':
       return (
@@ -207,7 +215,18 @@ async function run(req: Request): Promise<Response> {
 
   const parsed = await readJson(req)
   if (!parsed.ok) return error(parsed.error, 400, 'invalid_body')
-  const normalized = normalizeSubmission(parsed.data as Record<string, unknown>)
+  const raw = parsed.data as Record<string, unknown>
+  const rawApplicant =
+    raw.applicant && typeof raw.applicant === 'object'
+      ? (raw.applicant as Record<string, unknown>)
+      : {}
+  const discordLinkToken =
+    typeof raw.discord_link_token === 'string'
+      ? raw.discord_link_token
+      : typeof rawApplicant.discord_link_token === 'string'
+        ? rawApplicant.discord_link_token
+        : ''
+  const normalized = normalizeSubmission(raw)
   const checked = await validate<ApplicationData>('application', normalized)
   if (!checked.ok) return error(checked.error, 400, 'validation')
   const data = checked.data
@@ -229,6 +248,15 @@ async function run(req: Request): Promise<Response> {
   if (!['1', 'true', 'yes', 'on'].includes(applicationsOpen.toLowerCase())) {
     return error(closedMessage, 403, 'applications_closed')
   }
+  // Pozisyon açıklığının tek kaynağı `${slug}_applications_open` ayarıdır.
+  const positionOpen = await readSetting(
+    client,
+    `${data.position_slug}_applications_open`,
+    'true',
+  )
+  if (!['1', 'true', 'yes', 'on'].includes(positionOpen.toLowerCase())) {
+    return error(closedMessage, 403, 'position_closed')
+  }
 
   const rateLimitRaw = await readSetting(client, 'rate_limit_per_ip_per_hour', '5')
   const rateLimit = Math.max(1, Number.parseInt(rateLimitRaw, 10) || 5)
@@ -236,7 +264,7 @@ async function run(req: Request): Promise<Response> {
   const ip = forwarded || req.headers.get('x-real-ip')?.trim() || 'unknown'
   const ipSalt = env('RATE_LIMIT_SALT') ?? ''
   const ipKey = `ip:${hashIp(ip, ipSalt)}`
-  const allowed = await enforceRateLimit(client, ipKey, rateLimit)
+  const allowed = await incrementRateLimit(client, ipKey, rateLimit)
   if (!allowed) {
     return error('Çok fazla başvuru gönderdiniz. Lütfen bir saat sonra tekrar deneyin.', 429, 'rate_limit')
   }
@@ -272,6 +300,17 @@ async function run(req: Request): Promise<Response> {
     }
   }
 
+  let discordLink: VerifiedDiscordLink | null = null
+  if (discordLinkToken) {
+    if (!env('SESSION_SECRET')) {
+      return error('Oturum sistemi yapılandırılmamış: SESSION_SECRET tanımlanmalı.', 503, 'configuration')
+    }
+    discordLink = verifyDiscordLink(discordLinkToken, data.applicant_discord_username)
+    if (!discordLink) {
+      return error('Discord bağlantısı doğrulanamadı.', 400, 'invalid_link_token')
+    }
+  }
+
   const trackingNo = createTrackingNo(new Date().getUTCFullYear(), randomBytes(12))
   const queryToken = bytesToHex(randomBytes(32))
   const tokenHash = sha256Hex(queryToken)
@@ -284,7 +323,6 @@ async function run(req: Request): Promise<Response> {
     status: 'pending',
     applicant_minecraft_username: data.applicant_minecraft_username,
     applicant_discord_username: data.applicant_discord_username,
-    discord_connected: false,
     age: data.age,
     daily_hours: data.daily_hours,
     minecraft_experience: data.minecraft_experience ?? null,
@@ -293,20 +331,20 @@ async function run(req: Request): Promise<Response> {
     submitted_at: submittedAt,
     source_ip_hash: hashIp(ip, ipSalt),
   }
-  const inserted = await client
-    .from('applications')
-    .insert(applicationRow)
-    .select('id, tracking_no')
-    .single()
+  // Başvuru, cevaplar ve Discord bağlantısı tek veritabanı işleminde yazılır.
+  const inserted = await client.rpc('submit_application_atomic', {
+    p_application: applicationRow,
+    p_answers: answerRows,
+    p_discord_user_id: discordLink?.userId ?? null,
+    p_discord_username: discordLink?.username ?? null,
+  })
   if (inserted.error || !inserted.data) return error(defaultMessage(500), 500, 'database')
 
-  const applicationId = inserted.data.id as string
   const answerRows = questions
     .filter((question) => !isEmptyAnswer(submitted[question.id]))
     .map((question) => {
       const options = optionsByQuestion.get(question.id) ?? []
       return {
-        application_id: applicationId,
         question_id: question.id,
         question_text: question.question_text,
         question_type: question.question_type,
@@ -319,10 +357,6 @@ async function run(req: Request): Promise<Response> {
         value: submitted[question.id] ?? null,
       }
     })
-  if (answerRows.length > 0) {
-    const answersInsert = await client.from('application_answers').insert(answerRows)
-    if (answersInsert.error) return error(defaultMessage(500), 500, 'database')
-  }
 
   return json(
     { ok: true, tracking_no: trackingNo, query_token: queryToken },

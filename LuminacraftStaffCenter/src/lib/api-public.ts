@@ -105,6 +105,11 @@ export function areApplicationsOpen(settings: SettingsMap | null | undefined): b
   return !isSettingDisabled(settings, 'applications_open')
 }
 
+/** Pozisyon açıklığının tek kaynağı: `${slug}_applications_open`. */
+export function positionOpenSettingKey(slug: string): string {
+  return `${slug}_applications_open`
+}
+
 export function isPositionOpen(
   settings: SettingsMap | null | undefined,
   slug: string,
@@ -112,10 +117,7 @@ export function isPositionOpen(
 ): boolean {
   if (position && (position.is_active === false || position.is_open === false)) return false
   if (!areApplicationsOpen(settings)) return false
-  for (const key of [`${slug}_applications_open`, `${slug}_is_open`, `${slug}_open`]) {
-    if (isSettingDisabled(settings, key)) return false
-  }
-  return true
+  return !isSettingDisabled(settings, positionOpenSettingKey(slug))
 }
 
 // ---------------------------------------------------------------------------
@@ -137,6 +139,8 @@ export interface SubmitApplicationPayload {
   answers: Record<string, unknown> | AnswerEntry[]
   website?: string
   elapsed_ms?: number
+  /** Discord OAuth geri dönüşünde imzalanan geçici bağlantı belirteci. */
+  discord_link_token?: string
 }
 
 export interface ApplicationPayloadWire {
@@ -145,6 +149,7 @@ export interface ApplicationPayloadWire {
   answers: AnswerEntry[]
   website: string
   elapsed_ms: number
+  discord_link_token?: string
 }
 
 function isEmptyAnswer(value: unknown): boolean {
@@ -183,6 +188,7 @@ export function normalizeAnswers(
 export function buildApplicationPayload(
   payload: SubmitApplicationPayload,
 ): ApplicationPayloadWire {
+  const discordLinkToken = String(payload.discord_link_token ?? '')
   return {
     position_slug: String(payload.position_slug ?? '').trim(),
     applicant: payload.applicant ?? {},
@@ -192,6 +198,7 @@ export function buildApplicationPayload(
     elapsed_ms: payload.elapsed_ms === undefined
       ? 0
       : Math.max(0, Math.min(Math.round(payload.elapsed_ms), 3_600_000)),
+    ...(discordLinkToken ? { discord_link_token: discordLinkToken } : {}),
   }
 }
 
@@ -515,8 +522,26 @@ export async function lookupStatus(trackingNo: string, queryToken: string): Prom
   )
 }
 
-/** Discord OAuth akışı isteğe bağlıdır; yapılandırma yoksa yerel bir yol üretir. */
-export function getDiscordOAuthUrl(returnTo: string): string {
+/**
+ * Sunucu tarafında SESSION_SECRET ile imzalanan tek kullanımlık bağlantı belirtecini alır.
+ * İstemci sırrı asla görmez; yalnızca imzalı belirteci taşır.
+ */
+export async function requestDiscordLinkToken(): Promise<string> {
+  const result = await postJson<{ ok?: boolean; discord_link_token?: string }>(
+    '/discord-oauth',
+    { action: 'link-token' },
+    'Discord bağlantı belirteci alınamadı.',
+  )
+  if (!result?.discord_link_token) {
+    throw new PublicApiError('Discord bağlantı belirteci alınamadı.', 'BAD_RESPONSE')
+  }
+  return String(result.discord_link_token)
+}
+
+/** Discord OAuth akışı isteğe bağlıdır; imzalı bağlantı belirteci start URL'sine eklenir. */
+export function getDiscordOAuthUrl(returnTo: string, discordLinkToken: string): string {
   const base = String(import.meta.env.VITE_SUPABASE_URL ?? '').replace(/\/+$/, '')
-  return `${base}${FUNCTIONS_PATH}/discord-oauth?action=start&return_to=${encodeURIComponent(returnTo)}`
+  const params = new URLSearchParams({ action: 'start', return_to: returnTo })
+  if (discordLinkToken) params.set('discord_link_token', discordLinkToken)
+  return `${base}${FUNCTIONS_PATH}/discord-oauth?${params.toString()}`
 }

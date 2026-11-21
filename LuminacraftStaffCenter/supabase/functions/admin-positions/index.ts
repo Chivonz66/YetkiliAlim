@@ -7,13 +7,60 @@ import { readJson, validate } from '../_shared/validation.ts'
 
 type PositionBody = Record<string, any>
 
+/** Başvuru açıklığının tek kaynağı: `${slug}_applications_open` app_settings anahtarı. */
+export function applicationOpenKey(slug: string): string {
+  return `${slug}_applications_open`
+}
+
 /**
  * positions şemasında `is_open` sütunu yoktur; başvuru açıklığı app_settings
- * üzerinden yönetilir. Yazmalarda yalnızca gerçek sütunlar bırakılır.
+ * üzerinden yönetilir. positions yazımlarında yalnızca gerçek sütunlar bırakılır.
  */
 function toDbFields(fields: Record<string, any>): Record<string, any> {
   const { is_open: _ignored, ...rest } = fields
   return rest
+}
+
+function closedValue(value: unknown): boolean {
+  const text = String(value ?? '').trim().toLowerCase()
+  return ['false', '0', 'no', 'hayir', 'hayır', 'kapali', 'kapalı', 'off'].includes(text)
+}
+
+/** Yönetim listesi, app_settings değerini is_open alanı olarak geri yansıtır. */
+async function readOpenFlags(
+  client: any,
+  positions: Array<{ slug?: unknown }>,
+): Promise<Record<string, boolean>> {
+  const slugs = Array.from(
+    new Set(positions.map((position) => String(position?.slug ?? '')).filter(Boolean)),
+  )
+  if (slugs.length === 0) return {}
+  const result = await client
+    .from('app_settings')
+    .select('key,value')
+    .in('key', slugs.map(applicationOpenKey))
+  if (result.error) return {}
+  const flags: Record<string, boolean> = {}
+  for (const row of (result.data ?? []) as Array<{ key?: unknown; value?: unknown }>) {
+    const key = String(row?.key ?? '')
+    if (!key.endsWith('_applications_open')) continue
+    flags[key.slice(0, -'_applications_open'.length)] = !closedValue(row?.value)
+  }
+  return flags
+}
+
+/** UI'dan gelen is_open değerini kanonik app_settings anahtarına yazar. */
+async function persistOpenSetting(client: any, slug: unknown, isOpen: unknown): Promise<boolean> {
+  if (typeof slug !== 'string' || !slug || typeof isOpen !== 'boolean') return true
+  const result = await client.from('app_settings').upsert(
+    {
+      key: applicationOpenKey(slug),
+      value: isOpen,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: 'key' },
+  )
+  return !result.error
 }
 
 async function run(req: Request): Promise<Response> {
@@ -29,7 +76,15 @@ async function run(req: Request): Promise<Response> {
     if (method === 'GET') {
       const result = await client.from('positions').select('*').order('sort_order', { ascending: true })
       if (result.error) return error(defaultMessage(500), 500, 'database')
-      return json({ ok: true, positions: result.data ?? [] })
+      const positions = (result.data ?? []) as Array<Record<string, any>>
+      const openFlags = await readOpenFlags(client, positions)
+      return json({
+        ok: true,
+        positions: positions.map((position) => ({
+          ...position,
+          is_open: openFlags[String(position.slug)] ?? true,
+        })),
+      })
     }
 
     const parsed = await readJson(req)
@@ -45,6 +100,9 @@ async function run(req: Request): Promise<Response> {
         .select('*')
         .single()
       if (inserted.error || !inserted.data) return error(defaultMessage(500), 500, 'database')
+      if (!(await persistOpenSetting(client, checked.data.slug, checked.data.is_open))) {
+        return error(defaultMessage(500), 500, 'database')
+      }
       await writeAudit(client, auth.adminId, 'position_create', 'positions', inserted.data.id, {})
       return json({ ok: true, position: inserted.data }, 201)
     }
@@ -63,6 +121,11 @@ async function run(req: Request): Promise<Response> {
         .maybeSingle()
       if (updated.error) return error(defaultMessage(500), 500, 'database')
       if (!updated.data) return error(defaultMessage(404), 404, 'not_found')
+      // Slug değişirse yeni slug üzerindeki anahtar güncellenir.
+      const effectiveSlug = fields.slug ?? updated.data.slug
+      if (!(await persistOpenSetting(client, effectiveSlug, fields.is_open))) {
+        return error(defaultMessage(500), 500, 'database')
+      }
       await writeAudit(client, auth.adminId, 'position_update', 'positions', id, {
         fields: Object.keys(fields),
       })

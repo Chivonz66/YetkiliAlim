@@ -10,6 +10,9 @@ import { listPositions, updatePosition } from '../../lib/api-admin'
 import { POSITIONS } from '../../lib/constants'
 import type { Position } from '../../types'
 
+/** `is_open` positions sütunu değil, `${slug}_applications_open` app_settings anahtarıdır. */
+type PositionWithOpen = Position & { is_open?: boolean }
+
 interface Draft {
   description: string
   is_active: boolean
@@ -18,11 +21,11 @@ interface Draft {
   saving: boolean
 }
 
-function initialDraft(position: Position): Draft {
+function initialDraft(position: PositionWithOpen): Draft {
   return {
     description: position.description ?? '',
     is_active: position.is_active !== false,
-    is_open: (position as Position & { is_open?: boolean }).is_open !== false,
+    is_open: position.is_open !== false,
     dirty: false,
     saving: false,
   }
@@ -63,7 +66,7 @@ function Toggle({
 }
 
 export default function PositionsPage() {
-  const [positions, setPositions] = useState<Position[]>([])
+  const [positions, setPositions] = useState<PositionWithOpen[]>([])
   const [drafts, setDrafts] = useState<Record<string, Draft>>({})
   const [loading, setLoading] = useState(true)
   const [reloadKey, setReloadKey] = useState(0)
