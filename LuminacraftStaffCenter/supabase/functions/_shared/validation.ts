@@ -39,16 +39,17 @@ let schemasPromise: Promise<Record<SchemaName, Schema>> | null = null
 
 /** Edge'de CDN'den, Node/Vitest'ta yerel bağımlılıktan Zod yükler. */
 async function loadZod(): Promise<any> {
-  try {
+  // Node/Vitest: yerel zod paketi. Edge: Supabase dağıtımı sırasında statik
+  // olarak analiz edilebilmesi için CDN URL'si doğrudan import içinde yazılır.
+  // Hesaplanmış bir URL kullanıldığında derleme modülü gömmez ve çalışma
+  // zamanında "Doğrulama servisi yüklenemedi." hatası oluşur.
+  const edge = typeof globalThis !== 'undefined' && 'Deno' in globalThis
+  if (!edge) {
     const local = await import('zod')
     if ((local as any).z) return (local as any).z
-  } catch {
-    // Deno Edge çalışma zamanında çıplak "zod" çözümlenmez; CDN kullanılır.
   }
-  // Adres parçalı kurulur: Node/TypeScript yerel çözümlemeye çalışmaz; Deno
-  // çalışma zamanında bu bir geçerli HTTPS modülü URL'sidir.
-  const cdnUrl = ['https://esm.sh', 'zod@3'].join('/')
-  const remote = await import(/* @vite-ignore */ cdnUrl)
+  // @ts-ignore - HTTPS modülü yalnızca Deno/Edge çalışma zamanında çözümlenir.
+  const remote = await import(/* @vite-ignore */ 'https://esm.sh/zod@3')
   return remote.z as any
 }
 

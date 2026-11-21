@@ -46,6 +46,15 @@ const CLI = oku('scripts/create-first-admin.mjs')
 const SEMA = oku('supabase/migrations/0001_initial_schema.sql')
 const TOHUM = oku('supabase/migrations/0004_seed_data.sql')
 const HOME = oku('src/pages/HomePage.tsx')
+const VALIDATION = oku('supabase/functions/_shared/validation.ts')
+
+describe('Edge Zod yükleyici', () => {
+  it('CDN modülü statik import ile gömülür', () => {
+    expect(VALIDATION).toContain("import(/* @vite-ignore */ 'https://esm.sh/zod@3')")
+    expect(VALIDATION).not.toContain("['https://esm.sh', 'zod@3'].join('/')")
+    expect(VALIDATION).toContain("'Deno' in globalThis")
+  })
+})
 
 describe('YA-01: kurulum yüzeyi ve katı şema', () => {
   it('setup sır ile korunur, setup-status herkese açık kalır', () => {
