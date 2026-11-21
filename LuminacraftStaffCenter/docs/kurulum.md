@@ -18,21 +18,24 @@ Toplam süre: yaklaşık 20–30 dakika. Gereksinimler: Node.js 20+, npm, bir Su
 
 ## 2. Migrations dosyalarını sırayla uygula
 
-Dört SQL dosyası `LuminacraftStaffCenter/supabase/migrations/` altındadır. **Sıra önemlidir**; şema → RLS → fonksiyon/tetikleyici → tohum veri.
+Yedi SQL dosyası `LuminacraftStaffCenter/supabase/migrations/` altındadır. **Sıra önemlidir**; şema → RLS → fonksiyon/tetikleyici → tohum veri → atomik başvuru → bildirim tekilleştirme → canlı uzlaştırma.
 
 | Sıra | Dosya | Ne yapar |
 | --- | --- | --- |
-| 1 | `0001_initial_schema.sql` | `pgcrypto` uzantısı, 17 tablo (`positions`, `questions`, `applications`, `admins`, `admin_sessions`, `app_settings`, `rate_limits`, `discord_links`, `notification_queue`, `audit_logs` vb.), indeksler. |
+| 1 | `0001_initial_schema.sql` | `pgcrypto` uzantısı, 17 tablo (`positions`, `questions`, `applications`, `admins`, `admin_sessions`, `app_settings`, `rate_limits`, `discord_links`, `notification_queue`, `audit_logs` vb.), indeksler, yaş 16–99 denetimi ve `create_first_admin` RPC'si. |
 | 2 | `0002_rls_policies.sql` | Tüm tablolar için RLS; anon'a yalnızca etkin soru/pozisyon/kategori/ölçüt okuma; `lookup_application` ve `get_public_questions` RPC'leri. |
-| 3 | `0003_functions_triggers.sql` | `updated_at`, takip numarası, durum geçişi geçmişi, salt okunur denetim günlüğü, puan bütünlüğü, temizleme fonksiyonları. |
-| 4 | `0004_seed_data.sql` | 2 pozisyon, 5 kategori, 6 puan ölçütü (ağırlık toplamı 100), 13 soru, seçenekler ve varsayılan `app_settings`. |
+| 3 | `0003_functions_triggers.sql` | `updated_at`, takip numarası, durum geçişi geçmişi, salt okunur denetim günlüğü, puan bütünlüğü, temizleme fonksiyonları ve `apply_application_decision` RPC'si. |
+| 4 | `0004_seed_data.sql` | 2 pozisyon, 5 kategori, 6 puan ölçütü (ağırlık toplamı 100), 13 soru, seçenekler ve varsayılan `app_settings` (yaş sorusu 16–99). |
+| 5 | `0005_submit_atomic.sql` | `submit_application_atomic(...)` ve atomik `increment_rate_limit(...)` RPC'leri. |
+| 6 | `0006_decision_notify.sql` | Bildirim kuyruğunda tekilleştirme anahtarı, tek bekleyen satır garantisi ve `claim_pending_notification` / `claim_failed_notification` RPC'leri. |
+| 7 | `0007_live_reconciliation.sql` | İlk dağıtımdan sonra düzenlenen 0001/0003/0004 değişikliklerini zaten uygulanmış veritabanına ileriye dönük olarak taşır. |
 
 **Yöntem A — Supabase SQL Editor (önerilen):**
 
 1. Supabase Dashboard → **SQL Editor → New query**.
 2. `0001_initial_schema.sql` içeriğini yapıştırın → **Run**. "Success" görmeden sonraki dosyaya geçmeyin.
-3. Aynı işlemi `0002`, `0003`, `0004` için sırayla yapın.
-4. Tohum veri (`0004`) `ON CONFLICT DO NOTHING` kullanır; dosyayı birden fazla kez çalıştırmak veri çoğaltmaz.
+3. Aynı işlemi `0002`, `0003`, `0004`, `0005`, `0006`, `0007` için sırayla yapın.
+4. Tohum veri (`0004`) `ON CONFLICT DO NOTHING` kullanır; dosyayı birden fazla kez çalıştırmak veri çoğaltmaz. `0007`, mevcut yaş sorusunu 16–99 olarak günceller.
 
 **Yöntem B — psql (yerel/CLI):**
 
@@ -42,6 +45,9 @@ psql "$DATABASE_URL" -f supabase/migrations/0001_initial_schema.sql
 psql "$DATABASE_URL" -f supabase/migrations/0002_rls_policies.sql
 psql "$DATABASE_URL" -f supabase/migrations/0003_functions_triggers.sql
 psql "$DATABASE_URL" -f supabase/migrations/0004_seed_data.sql
+psql "$DATABASE_URL" -f supabase/migrations/0005_submit_atomic.sql
+psql "$DATABASE_URL" -f supabase/migrations/0006_decision_notify.sql
+psql "$DATABASE_URL" -f supabase/migrations/0007_live_reconciliation.sql
 ```
 
 > Bu dosyalar Supabase CLI'nin zaman damgalı göç adlandırmasını kullanmaz; bu yüzden `supabase db push` yerine yukarıdaki sıralı yöntemlerden birini kullanın.
@@ -107,7 +113,7 @@ node scripts/create-first-admin.mjs
 
 `SETUP_TOKEN` bir kimlik bilgisi değil, bu dokümanda yer alan yazılı onay ifadesidir. Komut başarılı olduğunda `Tamamlandı: İlk yönetici başarıyla oluşturuldu.` mesajını görürsünüz.
 
-> `admin-auth` ucundaki `setup` eylemi yalnızca `admins` tablosu boşken çalışır. Kurulumu CLI ile hemen yapın; böylece bu açık pencere kapanır. Ayrıntı: [guvenlik.md](guvenlik.md).
+> `admin-auth` ucundaki `setup` eylemi yalnızca `admins` tablosu boşken **ve** geçerli `x-admin-setup-secret` başlığı gönderildiğinde çalışır. Edge tarafında `ADMIN_SETUP_SECRET` tanımlı değilse bu eylem `403 forbidden` döner; önerilen kurulum yolu yukarıdaki CLI'dır. Ayrıntı: [guvenlik.md](guvenlik.md).
 
 ## 5. Edge Functions gizli anahtarlarını tanımla
 
@@ -118,6 +124,7 @@ Kodda gerçekten okunan değişkenler bunlardır (`_shared/db.ts`, `_shared/auth
 | `SUPABASE_URL` | Evet | Tüm uçlarda veritabanı istemcisi (`VITE_SUPABASE_URL` yedek). |
 | `SUPABASE_SERVICE_ROLE_KEY` | Evet | Tüm uçlarda yazma/silinme işlemleri; yalnızca sunucu. |
 | `SESSION_SECRET` | Evet | `admin-auth` oturum imzası (HMAC-SHA256), `discord-oauth` `state` özeti. Uzun rastgele bir değer kullanın. |
+| `ADMIN_SETUP_SECRET` | Edge `setup` kullanılacaksa | `admin-auth` kurulum eyleminin `x-admin-setup-secret` başlığıyla karşılaştırdığı değer. Tanımlı değilse `setup` kapalıdır; CLI kurulumundan sonra gerekmez. |
 | `RATE_LIMIT_SALT` | Önerilir | `submit-application` IP özetleme tuzu; ham IP saklanmaz. |
 | `ALLOWED_ORIGINS` | Üretimde evet | `_shared/cors.ts` allowlist'i ve OAuth sonrası güvenli dönüş adresi. Örn. `https://KULLANICI.github.io,http://localhost:5173`. |
 | `DISCORD_CLIENT_ID` | Discord ise | OAuth2 başlatma ve token değişimi. |
@@ -134,6 +141,7 @@ supabase secrets set \
   SUPABASE_URL=https://sizin-projeniz.supabase.co \
   SUPABASE_SERVICE_ROLE_KEY=<servis-anahtari> \
   SESSION_SECRET=<uzun-rastgele-deger> \
+  ADMIN_SETUP_SECRET=<edge-kurulum-ici-rastgele-deger> \
   RATE_LIMIT_SALT=<baska-bir-rastgele-deger> \
   ALLOWED_ORIGINS=https://KULLANICI.github.io,http://localhost:5173
 ```
@@ -184,7 +192,8 @@ npm run build      # tsc -b && vite build → dist/
 
 ## 9. Doğrulama kontrol listesi
 
-- [ ] SQL Editor'da dört göç dosyası hatasız uygulandı; `positions=2`, `questions=13`, ölçüt ağırlık toplamı `100`.
+- [ ] SQL Editor'da yedi göç dosyası hatasız uygulandı; `positions=2`, `questions=13`, ölçüt ağırlık toplamı `100`, yaş sorusu `16–99`.
+- [ ] `create_first_admin`, `apply_application_decision`, `submit_application_atomic`, `increment_rate_limit`, `claim_pending_notification`, `claim_failed_notification` RPC'leri `service_role` için çalıştırılabiliyor.
 - [ ] `.env` gerçek proje URL/anon anahtarını içeriyor, `service_role` içermiyor.
 - [ ] `node scripts/create-first-admin.mjs` başarılı; `admins` tablosunda 1 kayıt var.
 - [ ] `supabase secrets list` gerekli anahtar adlarını gösteriyor.
@@ -207,7 +216,7 @@ npm run build      # tsc -b && vite build → dist/
 | Başvuru `429 rate_limit` | IP başına saatlik sınır (varsayılan 5) doldu | Bir saat bekleyin veya `app_settings.rate_limit_per_ip_per_hour` değerini yönetim panelinden güncelleyin. |
 | CORS hatası (tarayıcı konsolunda) | `ALLOWED_ORIGINS` üretim adresini içermiyor | Origin'i virgülle ayrılmış listeye ekleyip uçları yeniden dağıtın; joker `*` kullanmayın. |
 | `İlk yönetici zaten oluşturulmuş` | `admins` tablosu dolu | Mevcut hesapla giriş yapın; değiştirme gerekiyorsa CLI'daki onay ifadesiyle `ALLOW_REPLACE_ADMIN=1` kullanın. |
-| `42703 / PGRST204` kolom hatası | Göç sırası atlandı veya şema sürümü eski | 0001→0004 sırasıyla yeniden uygulayın; uçlar bazı kolom varyantlarını tolere etse de şema tam olmalıdır. |
+| `42703 / PGRST204` kolom hatası | Göç sırası atlandı veya şema sürümü eski | 0001→0007 sırasıyla yeniden uygulayın; uçlar bazı kolom varyantlarını tolere etse de şema tam olmalıdır. |
 | Discord callback `invalid_state` | `DISCORD_REDIRECT_URI` farklı, cookie veya state süresi (10 dk) doldu | Yönlendirme URL'sini birebir eşitleyip akışı baştan başlatın. |
 | DM `failed` | Kullanıcı DM'leri kapalı veya bot token yok | Kullanıcı ayarını açın, `DISCORD_BOT_TOKEN` secret'ını kontrol edin, panelden **Yeniden Dene** yapın. |
 | GitHub Pages 404 / boş sayfa | `VITE_BASE_PATH` yanlış veya Pages kaynağı yanlış | [github-pages.md](github-pages.md) belgesindeki dağıtım kontrol listesini izleyin. |

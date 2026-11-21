@@ -95,6 +95,7 @@ Ardından **mutlaka** Supabase göçlerini uygulayın, Edge gizli anahtarların�
 | `SUPABASE_URL` | Evet | Sunucu tarafı proje URL'si (`VITE_SUPABASE_URL` yedeği okunur). |
 | `SUPABASE_SERVICE_ROLE_KEY` | Evet | Tüm veritabanı yazma işlemleri; **tarayıcıya asla gönderilmez**. |
 | `SESSION_SECRET` | Evet | Oturum belirteci HMAC imzası ve OAuth `state` özeti. |
+| `ADMIN_SETUP_SECRET` | Edge `setup` kullanılacaksa | `admin-auth` kurulum eylemi için `x-admin-setup-secret` başlığıyla karşılaştırılır; tanımlı değilse eylem kapalıdır. |
 | `RATE_LIMIT_SALT` | Önerilir | IP özetleme tuzu; ham IP saklanmaz. |
 | `ALLOWED_ORIGINS` | Üretimde evet | Virgülle ayrılmış izinli origin listesi (CORS + OAuth dönüşü). |
 | `DISCORD_CLIENT_ID` | Discord kullanılacaksa | OAuth2 uygulama kimliği. |
@@ -116,6 +117,6 @@ Ardından **mutlaka** Supabase göçlerini uygulayın, Edge gizli anahtarların�
 3. **İlk yönetici CLI ile oluşturulmalıdır.** Göçlerden sonra `node scripts/create-first-admin.mjs` komutu çalıştırılmazsa giriş yapılamaz.
 4. **GitHub Pages, GitHub Actions kaynağıyla etkinleştirilmelidir.** Aksi halde iş akışı artefaktı yayınlanamaz.
 5. **Supabase Gateway ve CORS:** Uçlar özel oturum çerezi kullandığı için `--no-verify-jwt` ile dağıtılmalı; `ALLOWED_ORIGINS` üretim adresini içermelidir.
-6. **Hız sınırı saklaması atomik değildir** (`rate_limits` tek satır güncellemesi); yüksek eşzamanlılıkta eşik birkaç istek aşılabilir.
+6. **Başvuru hız sınırı atomiktir** (`increment_rate_limit(...)` RPC'si); giriş kilidi (`admin-auth`) ise okuma-yazma döngüsü kullandığından çok yüksek eşzamanlılıkta birkaç deneme eşiği aşabilir.
 7. **Discord DM'i kullanıcı ayarlarına bağlıdır.** Kullanıcı DM'leri kapattıysa bildirim `failed` olarak işaretlenir ve panelden yeniden denenebilir; kararın kendisi etkilenmez.
-8. **İlk yönetici kurulumu:** `admin-auth` uçundaki `setup` eylemi yalnızca `admins` tablosu boşken çalışır. Güvenlik için kurulumu CLI ile hemen tamamlayın; detaylar [güvenlik belgesinde](docs/guvenlik.md) anlatılmıştır.
+8. **İlk yönetici kurulumu:** `admin-auth` uçundaki `setup` eylemi yalnızca `admins` tablosu boşken **ve** geçerli `x-admin-setup-secret` başlığı gönderildiğinde çalışır. Önerilen yol CLI'dir; detaylar [güvenlik belgesinde](docs/guvenlik.md) anlatılmıştır.

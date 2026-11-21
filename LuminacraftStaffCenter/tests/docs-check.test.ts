@@ -47,6 +47,9 @@ const GEREKLI_DOSYALAR: ReadonlyArray<string> = [
   'LuminacraftStaffCenter/supabase/migrations/0002_rls_policies.sql',
   'LuminacraftStaffCenter/supabase/migrations/0003_functions_triggers.sql',
   'LuminacraftStaffCenter/supabase/migrations/0004_seed_data.sql',
+  'LuminacraftStaffCenter/supabase/migrations/0005_submit_atomic.sql',
+  'LuminacraftStaffCenter/supabase/migrations/0006_decision_notify.sql',
+  'LuminacraftStaffCenter/supabase/migrations/0007_live_reconciliation.sql',
 ]
 
 const DOKUMANLAR = [
@@ -216,6 +219,10 @@ describe('doküman ve dağıtım dosyaları', () => {
       '0002_rls_policies.sql',
       '0003_functions_triggers.sql',
       '0004_seed_data.sql',
+      '0005_submit_atomic.sql',
+      '0006_decision_notify.sql',
+      '0007_live_reconciliation.sql',
+      'ADMIN_SETUP_SECRET',
       '.env.example',
       'VITE_SUPABASE_ANON_KEY',
       'create-first-admin.mjs',
@@ -275,6 +282,7 @@ describe('doküman ve dağıtım dosyaları', () => {
       'CSRF',
       'x-csrf-token',
       'SESSION_SECRET',
+      'ADMIN_SETUP_SECRET',
       'service_role',
       'supabase functions deploy',
       '--no-verify-jwt',
@@ -301,6 +309,8 @@ describe('doküman ve dağıtım dosyaları', () => {
       'audit_logs',
       'notları',
       'SHA-256',
+      'ADMIN_SETUP_SECRET',
+      '16–99',
       'döndürme',
       'Depoda BULUNMAYAN',
     ]) {

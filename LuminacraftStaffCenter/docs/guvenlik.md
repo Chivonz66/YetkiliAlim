@@ -17,7 +17,7 @@ Bu belge, Luminacraft Staff Center'ın gerçekten uyguladığı korumaları ve s
 - `SUPABASE_SERVICE_ROLE_KEY` yalnızca Supabase Edge Functions ortamındadır (`_shared/db.ts`); hiçbir yanıta, tarayıcı paketine, `.env` dosyasına veya GitHub Actions dosyasına eklenmez.
 - Tüm yazma/güncelleme/silme işlemleri bu sunucu istemcisiyle yapılır; tarayıcıdan gelen istek doğrudan korumalı tabloya yazamaz.
 - RLS'yi atlayan bu anahtarın gücü nedeniyle dağıtımda **yalnızca Edge secret'ı** olarak tutulur; CLI (`create-first-admin.mjs`) da anahtarı yalnızca çalışma anında ortam değişkeninden okur, diske yazmaz.
-- `admin-auth` ucundaki `setup` eylemi yalnızca `admins` tablosu boşken çalışır. Kurulumdan sonra yeni yönetici oluşturma bu yolla engellenir. **Kurulumu CLI ile hemen tamamlayın**; aksi halde ilk yöneticiyi ilk isteyen kişi oluşturabilir.
+- `admin-auth` ucundaki `setup` eylemi artık **ikili kapı** ile korunur: `admins` tablosu boş OLMALI **ve** istekte geçerli `x-admin-setup-secret` başlığı bulunmalıdır (Edge secret: `ADMIN_SETUP_SECRET`). Secret tanımlı değilse eylem `403 forbidden` döner; ilk yöneticiyi rastgele bir istekten oluşturma penceresi kapanır. Önerilen kurulum yolu CLI'dir.
 
 ## 3. Parolalar: PBKDF2-SHA256
 
@@ -25,7 +25,7 @@ Bu belge, Luminacraft Staff Center'ın gerçekten uyguladığı korumaları ve s
 - İlk yönetici CLI'si (`scripts/create-first-admin.mjs`) ve Edge `hashPassword` aynı parametreleri kullanır; ham parola diske, günlüğe veya yanıta yazılmaz.
 - Doğrulama Web Crypto `deriveBits` ile yapılır ve `timingSafeEqualHex` ile sabit zamanlı karşılaştırılır. Özet biçimi bozuksa doğrulama `false` döner.
 - Kullanıcı adı: 3–32 karakter, yalnızca harf/rakam/`.`/`_`/`-`; veritabanında `lower(username)` üzerinde tekil indeks vardır. Parola en az 12 karakter zorunludur.
-- Mevcut yöneticiyi değiştirmek için `ALLOW_REPLACE_ADMIN=1` **ve** `SETUP_TOKEN` onay ifadesi birlikte gerekir (kimlik bilgisi değil, yazılı onay).
+- Mevcut yöneticiyi değiştirmek için CLI'da `ALLOW_REPLACE_ADMIN=1` **ve** `SETUP_TOKEN` onay ifadesi birlikte gerekir (kimlik bilgisi değil, yazılı onay). Edge `setup` eylemi için ayrıca `ADMIN_SETUP_SECRET` zorunludur.
 
 ## 4. Oturum ve çerezler
 
@@ -47,8 +47,8 @@ Bu belge, Luminacraft Staff Center'ın gerçekten uyguladığı korumaları ve s
 - **Hız sınırı:** IP başına saatlik pencere; varsayılan `rate_limit_per_ip_per_hour = 5` (`app_settings`). IP ham olarak saklanmaz; `RATE_LIMIT_SALT` ile `sha256(salt:ip)` özeti kullanılır (`source_ip_hash` / `rate_limits.key`).
 - **Honeypot:** Formdaki `website` alanı kullanıcıya görünmez olmalı; doldurulursa `400 honeypot` döner.
 - **Zaman eşiği:** `elapsed_ms >= 3000`; çok hızlı gönderimler `429 too_fast` ile reddedilir. Botların formu saniyeler içinde doldurması engellenir.
-- **Sunucu tarafı doğrulama:** Zod şemaları alan uzunluklarını, Minecraft/Discord kullanıcı adı desenlerini, yaş (10–120) ve saat (0–24) aralıklarını, cevap tiplerini zorunlu kılar. Soru metinleri ve seçenekler istemciden değil veritabanından okunur.
-- **Bilinen sınır:** `rate_limits` güncellemesi atomik değildir (tek satır okuma-yazma); yüksek eşzamanlılıkta eşik birkaç istek aşılabilir. Kritik bir kampanya öncesinde ayarı düşürmek ve logları izlemek önerilir.
+- **Sunucu tarafı doğrulama:** Zod şemaları alan uzunluklarını, Minecraft/Discord kullanıcı adı desenlerini, yaş (**16–99**) ve saat (0–24) aralıklarını, cevap tiplerini zorunlu kılar. Soru metinleri ve seçenekler istemciden değil veritabanından okunur. Seçenek listesi boşsa seçim tipi cevaplar reddedilir.
+- **Hız sınırı güncellemesi:** Başvuru tarafı artık `0005_submit_atomic.sql` içindeki `increment_rate_limit(...)` RPC'siyle atomiktir (`INSERT ... ON CONFLICT ... RETURNING`). Giriş kilidi (`admin-auth`) hâlâ okuma-yazma döngüsü kullandığından çok yüksek eşzamanlılıkta birkaç deneme eşiği aşabilir; logları izlemek önerilir.
 
 ## 7. XSS ve SQL enjeksiyonu
 
@@ -77,7 +77,7 @@ Bu belge, Luminacraft Staff Center'ın gerçekten uyguladığı korumaları ve s
 Aşağıdakiler bu depoda, `.env.example` içinde, iş akışında veya dokümanlarda **gerçek değeriyle** yer almaz — yalnızca placeholder adları geçer:
 
 - `SUPABASE_SERVICE_ROLE_KEY`, gerçek anon key veya JWT belirteci
-- `SESSION_SECRET`, `RATE_LIMIT_SALT`
+- `SESSION_SECRET`, `RATE_LIMIT_SALT`, `ADMIN_SETUP_SECRET`
 - `DISCORD_CLIENT_SECRET`, `DISCORD_BOT_TOKEN`
 - Yönetici kullanıcı adı/parolası, başvuranların e-posta/adres bilgileri
 - Ham sorgu anahtarı, oturum belirteci, CSRF değeri, OAuth `code`/`state`
